@@ -38,6 +38,9 @@ namespace Core
             _inactivityTimeoutSubscription = _inactivityTimeoutSubscriber?.Subscribe(_ => ReturnToFirstScreen());
         }
 
+        /// <summary>
+        /// 비활성화 시 타임아웃 이벤트 구독을 해제해 파괴된 매니저가 이벤트를 받지 않게 함.
+        /// </summary>
         protected override void OnDisable()
         {
             base.OnDisable();
