@@ -1,4 +1,5 @@
 using Core;
+using Hardware;
 using VContainer;
 using VContainer.Unity;
 using HuliacDev.App;
@@ -18,6 +19,8 @@ namespace App
         {
             base.Configure(builder);
             ConfigureManagers(builder);
+            ConfigureReceiverInput(builder);
+            ConfigureSession(builder);
         }
 
         /// <summary>
@@ -26,6 +29,24 @@ namespace App
         private void ConfigureManagers(IContainerBuilder builder)
         {
             builder.RegisterComponentInHierarchy<GameManager>();
+        }
+
+        /// <summary>
+        /// 수화기 입력 서비스를 등록함. 아두이노 구현이 생기기 전까지는 Space 토글 키보드 구현을 쓴다.
+        /// 씬이 바뀌어도 수화기 상태가 유지되도록 루트 스코프에 싱글톤으로 둔다.
+        /// </summary>
+        private void ConfigureReceiverInput(IContainerBuilder builder)
+        {
+            builder.Register<ProjectInputActions>(Lifetime.Singleton);
+            builder.Register<KeyboardReceiverInput>(Lifetime.Singleton).As<IReceiverInput>();
+        }
+
+        /// <summary>
+        /// 씬이 바뀌어도 유지되는 체험 세션(난이도·콘텐츠 선택)을 등록함.
+        /// </summary>
+        private void ConfigureSession(IContainerBuilder builder)
+        {
+            builder.Register<ExperienceSession>(Lifetime.Singleton);
         }
     }
 }

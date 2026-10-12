@@ -85,15 +85,48 @@ public partial class @ProjectInputActions: IInputActionCollection2, IDisposable
     public @ProjectInputActions()
     {
         asset = InputActionAsset.FromJson(@"{
-    ""version"": 0,
+    ""version"": 1,
     ""name"": ""ProjectInputActions"",
-    ""maps"": [],
+    ""maps"": [
+        {
+            ""name"": ""Receiver"",
+            ""id"": ""0c8529be-3ed7-4bca-8691-0c3f5b13e62b"",
+            ""actions"": [
+                {
+                    ""name"": ""Toggle"",
+                    ""type"": ""Button"",
+                    ""id"": ""a4db59af-6a77-4235-94a8-5fedd180342e"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                }
+            ],
+            ""bindings"": [
+                {
+                    ""name"": """",
+                    ""id"": ""01eb772f-eb41-4628-b43a-5dc96885b419"",
+                    ""path"": ""<Keyboard>/space"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Toggle"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                }
+            ]
+        }
+    ],
     ""controlSchemes"": []
 }");
+        // Receiver
+        m_Receiver = asset.FindActionMap("Receiver", throwIfNotFound: true);
+        m_Receiver_Toggle = m_Receiver.FindAction("Toggle", throwIfNotFound: true);
     }
 
     ~@ProjectInputActions()
     {
+        UnityEngine.Debug.Assert(!m_Receiver.enabled, "This will cause a leak and performance issues, ProjectInputActions.Receiver.Disable() has not been called.");
     }
 
     /// <summary>
@@ -164,5 +197,116 @@ public partial class @ProjectInputActions: IInputActionCollection2, IDisposable
     public int FindBinding(InputBinding bindingMask, out InputAction action)
     {
         return asset.FindBinding(bindingMask, out action);
+    }
+
+    // Receiver
+    private readonly InputActionMap m_Receiver;
+    private List<IReceiverActions> m_ReceiverActionsCallbackInterfaces = new List<IReceiverActions>();
+    private readonly InputAction m_Receiver_Toggle;
+    /// <summary>
+    /// Provides access to input actions defined in input action map "Receiver".
+    /// </summary>
+    public struct ReceiverActions
+    {
+        private @ProjectInputActions m_Wrapper;
+
+        /// <summary>
+        /// Construct a new instance of the input action map wrapper class.
+        /// </summary>
+        public ReceiverActions(@ProjectInputActions wrapper) { m_Wrapper = wrapper; }
+        /// <summary>
+        /// Provides access to the underlying input action "Receiver/Toggle".
+        /// </summary>
+        public InputAction @Toggle => m_Wrapper.m_Receiver_Toggle;
+        /// <summary>
+        /// Provides access to the underlying input action map instance.
+        /// </summary>
+        public InputActionMap Get() { return m_Wrapper.m_Receiver; }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.Enable()" />
+        public void Enable() { Get().Enable(); }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.Disable()" />
+        public void Disable() { Get().Disable(); }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.enabled" />
+        public bool enabled => Get().enabled;
+        /// <summary>
+        /// Implicitly converts an <see ref="ReceiverActions" /> to an <see ref="InputActionMap" /> instance.
+        /// </summary>
+        public static implicit operator InputActionMap(ReceiverActions set) { return set.Get(); }
+        /// <summary>
+        /// Adds <see cref="InputAction.started"/>, <see cref="InputAction.performed"/> and <see cref="InputAction.canceled"/> callbacks provided via <param cref="instance" /> on all input actions contained in this map.
+        /// </summary>
+        /// <param name="instance">Callback instance.</param>
+        /// <remarks>
+        /// If <paramref name="instance" /> is <c>null</c> or <paramref name="instance"/> have already been added this method does nothing.
+        /// </remarks>
+        /// <seealso cref="ReceiverActions" />
+        public void AddCallbacks(IReceiverActions instance)
+        {
+            if (instance == null || m_Wrapper.m_ReceiverActionsCallbackInterfaces.Contains(instance)) return;
+            m_Wrapper.m_ReceiverActionsCallbackInterfaces.Add(instance);
+            @Toggle.started += instance.OnToggle;
+            @Toggle.performed += instance.OnToggle;
+            @Toggle.canceled += instance.OnToggle;
+        }
+
+        /// <summary>
+        /// Removes <see cref="InputAction.started"/>, <see cref="InputAction.performed"/> and <see cref="InputAction.canceled"/> callbacks provided via <param cref="instance" /> on all input actions contained in this map.
+        /// </summary>
+        /// <remarks>
+        /// Calling this method when <paramref name="instance" /> have not previously been registered has no side-effects.
+        /// </remarks>
+        /// <seealso cref="ReceiverActions" />
+        private void UnregisterCallbacks(IReceiverActions instance)
+        {
+            @Toggle.started -= instance.OnToggle;
+            @Toggle.performed -= instance.OnToggle;
+            @Toggle.canceled -= instance.OnToggle;
+        }
+
+        /// <summary>
+        /// Unregisters <param cref="instance" /> and unregisters all input action callbacks via <see cref="ReceiverActions.UnregisterCallbacks(IReceiverActions)" />.
+        /// </summary>
+        /// <seealso cref="ReceiverActions.UnregisterCallbacks(IReceiverActions)" />
+        public void RemoveCallbacks(IReceiverActions instance)
+        {
+            if (m_Wrapper.m_ReceiverActionsCallbackInterfaces.Remove(instance))
+                UnregisterCallbacks(instance);
+        }
+
+        /// <summary>
+        /// Replaces all existing callback instances and previously registered input action callbacks associated with them with callbacks provided via <param cref="instance" />.
+        /// </summary>
+        /// <remarks>
+        /// If <paramref name="instance" /> is <c>null</c>, calling this method will only unregister all existing callbacks but not register any new callbacks.
+        /// </remarks>
+        /// <seealso cref="ReceiverActions.AddCallbacks(IReceiverActions)" />
+        /// <seealso cref="ReceiverActions.RemoveCallbacks(IReceiverActions)" />
+        /// <seealso cref="ReceiverActions.UnregisterCallbacks(IReceiverActions)" />
+        public void SetCallbacks(IReceiverActions instance)
+        {
+            foreach (var item in m_Wrapper.m_ReceiverActionsCallbackInterfaces)
+                UnregisterCallbacks(item);
+            m_Wrapper.m_ReceiverActionsCallbackInterfaces.Clear();
+            AddCallbacks(instance);
+        }
+    }
+    /// <summary>
+    /// Provides a new <see cref="ReceiverActions" /> instance referencing this action map.
+    /// </summary>
+    public ReceiverActions @Receiver => new ReceiverActions(this);
+    /// <summary>
+    /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "Receiver" which allows adding and removing callbacks.
+    /// </summary>
+    /// <seealso cref="ReceiverActions.AddCallbacks(IReceiverActions)" />
+    /// <seealso cref="ReceiverActions.RemoveCallbacks(IReceiverActions)" />
+    public interface IReceiverActions
+    {
+        /// <summary>
+        /// Method invoked when associated input action "Toggle" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnToggle(InputAction.CallbackContext context);
     }
 }

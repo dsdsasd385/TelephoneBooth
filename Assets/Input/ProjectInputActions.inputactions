@@ -1,6 +1,35 @@
 {
     "version": 1,
     "name": "ProjectInputActions",
-    "maps": [],
+    "maps": [
+        {
+            "name": "Receiver",
+            "id": "0c8529be-3ed7-4bca-8691-0c3f5b13e62b",
+            "actions": [
+                {
+                    "name": "Toggle",
+                    "type": "Button",
+                    "id": "a4db59af-6a77-4235-94a8-5fedd180342e",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "01eb772f-eb41-4628-b43a-5dc96885b419",
+                    "path": "<Keyboard>/space",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Toggle",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
     "controlSchemes": []
 }
