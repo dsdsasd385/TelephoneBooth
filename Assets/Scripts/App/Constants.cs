@@ -14,6 +14,8 @@ namespace App
         {
             // StreamingAssets 기준 상대 경로. 0_Idle 페이지별 영상·TTS 파일 목록.
             public const string IdlePages = "Data/IdlePages.json";
+            // 영상 재생 방식(더블 버퍼링 on/off) 설정.
+            public const string MediaSettings = "Data/MediaSettings.json";
         }
     }
 }

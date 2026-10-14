@@ -4,6 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Data;
 using Microsoft.Extensions.Logging;
+using R3;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -18,26 +19,59 @@ namespace Media
     /// <summary>
     /// 페이지 단위로 영상(무음 반복)과 TTS(1회)를 재생하는 공용 재생기.
     /// <para>
-    /// VideoPlayer 1개와 RenderTexture 1개를 모든 페이지가 공유한다. 페이지마다 플레이어나
-    /// 텍스처를 새로 만들지 않으므로 페이지를 반복해서 넘겨도 힙·VRAM 할당이 늘지 않는다.
     /// 영상 URL과 TTS AudioClip은 LoadAsync에서 한 번만 만들어 두고 재생 시에는 참조만 바꾼다.
+    /// 플레이어·텍스처는 미리 만든 슬롯을 재사용하므로 페이지를 반복해서 넘겨도 힙·VRAM 할당이 늘지 않는다.
     /// </para>
     /// <para>
-    /// 이전 영상의 마지막 프레임이 보이지 않도록, 페이지를 바꿀 때 RenderTexture를 비우고
-    /// 대상 RawImage를 끈 뒤 새 영상의 첫 프레임이 준비된 시점(frameReady)에 다시 켠다.
-    /// TTS도 같은 시점에 시작해 영상 첫 프레임과 음성 시작을 맞춘다.
+    /// 페이지를 바꿀 때 새 영상을 준비하는 동안은 이전 화면이 그대로 보이고, 새 영상의 첫 프레임이 나온 시점(frameReady)에
+    /// 새 RawImage를 켜고 TTS를 시작한 뒤 PageShown을 발행한다. 호출자는 PageShown을 받은 같은 프레임에 화면 루트를 교체한다.
+    /// </para>
+    /// <para>
+    /// 더블 버퍼링(SetDoubleBuffering)
+    /// - 끔: 플레이어 1개. 전환 중 이전 화면은 마지막 프레임에 멈추고, 반복은 끝에서 프레임 0으로 되돌린다(약 33–50ms 멈춤).
+    /// - 켬: 플레이어 2개(Front=보이는 쪽, Back=대기). Back에 같은 영상을 첫 프레임에 멈춰 두었다가 Front가 끝나면 바로 교체해
+    ///   끊김 없이 반복한다. 전환 때는 Back에 새 영상을 준비하는 동안 Front가 계속 재생된다. 두 번째 텍스처는 켤 때만 만든다.
     /// </para>
     /// </summary>
     public class PageMediaPlayer : MonoBehaviour
     {
+        #region Nested Types
+
+        /// <summary>
+        /// 영상 플레이어 하나와 그 출력 텍스처, 반복 대기 상태.
+        /// </summary>
+        private sealed class VideoSlot
+        {
+            public VideoPlayer Player;
+            public RenderTexture Texture;
+            // 반복 교체용으로 Front와 같은 영상을 첫 프레임에 멈춰 둔 상태.
+            public bool IsPrimed;
+            // 첫 프레임에 멈추기 위해 재생을 시작했고 아직 첫 프레임이 오지 않은 상태.
+            public bool IsPriming;
+        }
+
+        #endregion
+
         #region Serialized Fields
 
         [SerializeField] private VideoPlayer _videoPlayer;
+        // 더블 버퍼링을 켤 때만 쓰는 두 번째 플레이어. 비어 있으면 더블 버퍼링을 켤 수 없다.
+        [SerializeField] private VideoPlayer _secondaryVideoPlayer;
         [SerializeField] private AudioSource _ttsSource;
         [SerializeField] private Vector2Int _renderTextureSize = new Vector2Int(1920, 1080);
         [SerializeField] private float _prepareTimeoutSeconds = 10f;
-        [SerializeField] private float _maxAvDriftSeconds = 0.1f;
-        [SerializeField] private float _driftCheckIntervalSeconds = 0.5f;
+        // TTS 대비 영상 위치 보정(초). 양수면 영상이 그만큼 앞선 장면을 보여 준다.
+        // 오디오 출력 지연이나 원본 파일 간 시작 차이를 맞출 때 쓴다.
+        [SerializeField] private float _videoOffsetSeconds = 0f;
+        // 영상·TTS 차이(초)당 재생 속도 조절량. 0.5면 100ms 차이에서 속도를 5% 바꾼다.
+        [SerializeField] private float _speedGainPerSecond = 0.5f;
+        // 재생 속도 조절 한도(비율). 0.1이면 0.9–1.1배 사이에서만 바꾼다.
+        [SerializeField] private float _maxSpeedAdjust = 0.1f;
+        // 이보다 작은 차이는 조절하지 않는다(프레임 단위 흔들림 무시).
+        [SerializeField] private float _speedDeadZoneSeconds = 0.01f;
+        // 이보다 큰 차이가 두 번 연속 확인되면 속도 조절 대신 한 번 탐색(seek)한다.
+        [SerializeField] private float _seekThresholdSeconds = 0.3f;
+        [SerializeField] private float _seekCheckIntervalSeconds = 0.25f;
 
         #endregion
 
@@ -45,7 +79,15 @@ namespace Media
 
         private static readonly ProfilerMarker LoadTtsMarker = new ProfilerMarker("PageMediaPlayer.LoadTtsAsync");
 
-        private RenderTexture _renderTexture;
+        private VideoSlot _slotA;
+        private VideoSlot _slotB;
+        // 화면에 보이는 슬롯과 대기 슬롯. 더블 버퍼링을 끄면 Front만 쓴다.
+        private VideoSlot _front;
+        private VideoSlot _back;
+        // 페이지 전환 중 새 영상을 준비하는 슬롯. 끔이면 Front, 켬이면 Back.
+        private VideoSlot _transitionSlot;
+        private bool _isDoubleBuffering;
+
         private string[] _videoUrls = Array.Empty<string>();
         private AudioClip[] _ttsClips = Array.Empty<AudioClip>();
 
@@ -61,10 +103,14 @@ namespace Media
         private bool _prepareFailed;
         private float _prepareDeadline;
         private Func<bool> _isPrepareSettled;
+        // TTS가 나오는 동안 true. 이때 영상 재생 속도를 조절해 TTS 위치에 맞춘다.
         private bool _isSyncingToTts;
+        // 프레임 단위 흔들림을 걸러 낸 영상−TTS 차이(초).
+        private double _smoothedDrift;
         private bool _isSeeking;
-        private int _driftStrikeCount;
-        private float _nextDriftCheckTime;
+        private int _seekStrikeCount;
+        private float _nextSeekCheckTime;
+        private readonly Subject<int> _pageShown = new Subject<int>();
 
         private ILogger<PageMediaPlayer> _logger;
 
@@ -75,10 +121,24 @@ namespace Media
         public int PageCount => _videoUrls.Length;
 
         /// <summary>
+        /// 더블 버퍼링이 켜져 있는지 여부.
+        /// </summary>
+        public bool IsDoubleBuffering => _isDoubleBuffering;
+
+        /// <summary>
         /// 현재 페이지의 TTS가 재생 중이거나 곧 시작될 예정인지 여부. 입력 막기·자동 진행 판단에 쓴다.
         /// TTS가 없는 페이지는 영상 첫 프레임이 나온 뒤 false가 된다.
         /// </summary>
         public bool IsTtsPlaying => _isAwaitingTts || (_ttsSource && _ttsSource.isPlaying);
+
+        /// <summary>
+        /// 요청한 페이지의 영상 첫 프레임이 화면에 나온 순간 그 페이지 번호를 발행함.
+        /// 화면 루트 교체는 이 시점에 해야 전환 중 검은 틈이 생기지 않는다. 다른 페이지 요청에 밀린 요청은 발행되지 않는다.
+        /// </summary>
+        public Observable<int> PageShown => _pageShown;
+
+        // 화면에 보이는 플레이어. 동기 맞추기는 이 플레이어에만 적용한다.
+        private VideoPlayer FrontPlayer => _front.Player;
 
         #endregion
 
@@ -94,23 +154,31 @@ namespace Media
         }
 
         /// <summary>
-        /// 공유 RenderTexture를 한 번 만들고 VideoPlayer를 무음 반복 재생 설정으로 고정함.
+        /// 슬롯을 만들고 플레이어를 무음·수동 반복 설정으로 고정함. 두 번째 텍스처는 더블 버퍼링을 켤 때 만든다.
         /// </summary>
         private void Awake()
         {
             _isPrepareSettled = IsPrepareSettled;
-            _renderTexture = new RenderTexture(Mathf.Max(2, _renderTextureSize.x), Mathf.Max(2, _renderTextureSize.y), 0, RenderTextureFormat.ARGB32);
-            _renderTexture.name = "PageMediaPlayer_RT";
-            _renderTexture.Create();
-            ClearRenderTexture();
+
+            if (!_videoPlayer)
+            {
+                Debug.LogError("[PageMediaPlayer] VideoPlayer is not assigned.");
+            }
+
+            _slotA = new VideoSlot { Player = _videoPlayer };
+            _slotB = new VideoSlot { Player = _secondaryVideoPlayer };
+            _front = _slotA;
+            _back = _slotB;
 
             if (_videoPlayer)
             {
-                ConfigureVideoPlayer();
+                ConfigureVideoPlayer(_videoPlayer);
+                EnsureSlotTexture(_slotA, "PageMediaPlayer_RT_A");
             }
-            else
+
+            if (_secondaryVideoPlayer)
             {
-                Debug.LogError("[PageMediaPlayer] VideoPlayer is not assigned.");
+                ConfigureVideoPlayer(_secondaryVideoPlayer);
             }
 
             if (_ttsSource)
@@ -125,13 +193,13 @@ namespace Media
         }
 
         /// <summary>
-        /// TTS 재생 중에만 영상과 TTS의 시간 차이를 확인함.
+        /// TTS 재생 중에만 영상 재생 속도를 TTS 위치에 맞춰 조절함.
         /// </summary>
         private void Update()
         {
             if (_isSyncingToTts)
             {
-                CorrectVideoDrift();
+                SyncVideoToTts();
             }
         }
 
@@ -140,27 +208,15 @@ namespace Media
         /// </summary>
         private void OnDestroy()
         {
-            if (_videoPlayer)
-            {
-                _videoPlayer.errorReceived -= OnVideoError;
-                _videoPlayer.frameReady -= OnFrameReady;
-                _videoPlayer.seekCompleted -= OnSeekCompleted;
-                _videoPlayer.Stop();
-                _videoPlayer.targetTexture = null;
-            }
-
+            ReleaseSlot(_slotA);
+            ReleaseSlot(_slotB);
             ReleaseClips();
-
-            if (_renderTexture)
-            {
-                _renderTexture.Release();
-                DestroyUtil.SafeDestroy(_renderTexture);
-            }
+            _pageShown.Dispose();
         }
 
         #endregion
 
-        #region Public Methods (Load / Play / Stop)
+        #region Public Methods (Load / Play / Stop / Double Buffering)
 
         /// <summary>
         /// 페이지 목록의 영상 경로를 재생용 경로로 바꿔 두고 TTS 클립을 모두 미리 로드함.
@@ -188,7 +244,7 @@ namespace Media
         }
 
         /// <summary>
-        /// 지정한 페이지의 영상을 대상 RawImage에 재생하고, 첫 프레임이 나오면 TTS를 시작함.
+        /// 지정한 페이지의 영상을 대상 RawImage에 재생하고, 첫 프레임이 나오면 TTS를 시작하고 PageShown을 발행함.
         /// </summary>
         public void Play(int pageIndex, RawImage surface)
         {
@@ -211,33 +267,68 @@ namespace Media
             ResetPlayback();
         }
 
+        /// <summary>
+        /// 더블 버퍼링을 켜거나 끔. 켜면 두 번째 텍스처를 만들고 반복 대기를 시작하며, 끄면 두 번째 플레이어를 멈추고 텍스처를 해제함.
+        /// 재생 중에 바꿔도 되며 다음 반복이나 다음 전환부터 적용된다.
+        /// </summary>
+        public void SetDoubleBuffering(bool isEnabled)
+        {
+            if (isEnabled == _isDoubleBuffering) return;
+
+            if (isEnabled)
+            {
+                if (!_secondaryVideoPlayer)
+                {
+                    if (_logger != null) _logger.ZLogWarning($"[PageMediaPlayer] Secondary VideoPlayer is not assigned. Double buffering stays off.");
+                    return;
+                }
+
+                _isDoubleBuffering = true;
+                EnsureSlotTexture(_back, _back == _slotA ? "PageMediaPlayer_RT_A" : "PageMediaPlayer_RT_B");
+                PrimeBackForLoop();
+            }
+            else
+            {
+                _isDoubleBuffering = false;
+                // 전환 중이면 Back이 새 영상을 준비하고 있으므로 그 전환이 끝난 뒤(CompleteTransition) 정리된다.
+                if (_transitionSlot != _back) ReleaseBackSlot();
+            }
+
+            if (_logger != null) _logger.ZLogInformation($"[PageMediaPlayer] Double buffering {(isEnabled ? "on" : "off")}.");
+        }
+
         #endregion
 
         #region Playback
 
         /// <summary>
-        /// 이전 페이지를 정리하고 새 영상을 준비해 재생하는 전환 흐름.
+        /// 이전 화면을 보이는 채로 두고 새 영상을 준비해 재생하는 전환 흐름.
         /// </summary>
         private async UniTaskVoid PlayAsync(int requestId, int pageIndex, RawImage surface, CancellationToken cancellationToken)
         {
-            if (!_videoPlayer) return;
+            if (!FrontPlayer) return;
 
-            ResetPlayback();
+            BeginTransition();
             AttachSurface(surface);
             _isAwaitingTts = true;
+            _pendingTtsIndex = pageIndex;
+
+            VideoSlot target = SelectTransitionSlot();
+            _transitionSlot = target;
 
             string url = _videoUrls[pageIndex];
             if (string.IsNullOrEmpty(url))
             {
                 if (_logger != null) _logger.ZLogWarning($"[PageMediaPlayer] Page {pageIndex} has no video. Playing TTS only.");
-                RevealSurfaceAndStartTts(pageIndex);
+                FailTransition(target);
                 return;
             }
 
             _prepareFailed = false;
             _prepareDeadline = Time.realtimeSinceStartup + _prepareTimeoutSeconds;
-            _videoPlayer.url = url;
-            _videoPlayer.Prepare();
+            target.Player.playbackSpeed = 1f;
+            target.Player.url = url;
+            target.Player.Prepare();
 
             try
             {
@@ -251,16 +342,38 @@ namespace Media
             // 기다리는 사이 다른 페이지가 요청됐으면 그 요청이 플레이어를 이미 넘겨받았다.
             if (requestId != _playRequestId) return;
 
-            if (!_videoPlayer.isPrepared)
+            if (!target.Player.isPrepared)
             {
                 if (_logger != null) _logger.ZLogError($"[PageMediaPlayer] Video prepare failed or timed out: {url}");
-                RevealSurfaceAndStartTts(pageIndex);
+                FailTransition(target);
                 return;
             }
 
-            _pendingTtsIndex = pageIndex;
-            _videoPlayer.sendFrameReadyEvents = true;
-            _videoPlayer.Play();
+            target.Player.sendFrameReadyEvents = true;
+            target.Player.Play();
+        }
+
+        /// <summary>
+        /// 새 영상을 준비할 슬롯을 고름. 끔이면 Front를 그대로 쓰고, 켬이면 Front가 계속 재생되도록 Back을 쓴다.
+        /// </summary>
+        private VideoSlot SelectTransitionSlot()
+        {
+            if (!_isDoubleBuffering) return _front;
+
+            EnsureSlotTexture(_back, _back == _slotA ? "PageMediaPlayer_RT_A" : "PageMediaPlayer_RT_B");
+            _back.IsPrimed = false;
+            _back.IsPriming = false;
+            return _back;
+        }
+
+        /// <summary>
+        /// 영상이 없거나 준비에 실패한 전환을 영상 없이 마무리함. 이전 영상이 새 화면에 남지 않게 텍스처를 비운다.
+        /// </summary>
+        private void FailTransition(VideoSlot target)
+        {
+            if (target.Player) target.Player.Stop();
+            ClearRenderTexture(target.Texture);
+            CompleteTransition();
         }
 
         /// <summary>
@@ -268,22 +381,80 @@ namespace Media
         /// </summary>
         private bool IsPrepareSettled()
         {
-            return !_videoPlayer || _videoPlayer.isPrepared || _prepareFailed || Time.realtimeSinceStartup > _prepareDeadline;
+            return _transitionSlot == null || !_transitionSlot.Player || _transitionSlot.Player.isPrepared
+                || _prepareFailed || Time.realtimeSinceStartup > _prepareDeadline;
         }
 
         /// <summary>
-        /// 숨겨 둔 RawImage를 보이게 하고 대기 중인 페이지의 TTS를 재생함.
+        /// 새 영상의 첫 프레임이 나오면 슬롯 역할을 정리하고 화면을 넘긴 뒤, 켬이면 다음 반복을 준비함.
+        /// </summary>
+        private void CompleteTransition()
+        {
+            VideoSlot shown = _transitionSlot;
+            _transitionSlot = null;
+            if (shown == null) return;
+
+            if (shown != _front)
+            {
+                VideoSlot previous = _front;
+                _front = shown;
+                _back = previous;
+                previous.Player.sendFrameReadyEvents = false;
+                previous.Player.playbackSpeed = 1f;
+                previous.IsPrimed = false;
+                previous.IsPriming = false;
+            }
+
+            int pageIndex = _pendingTtsIndex;
+            RevealSurfaceAndStartTts(pageIndex);
+
+            if (_isDoubleBuffering)
+            {
+                PrimeBackForLoop();
+            }
+            else
+            {
+                // 전환 중에 더블 버퍼링을 껐다면 이제 Back을 정리한다.
+                ReleaseBackSlot();
+            }
+        }
+
+        /// <summary>
+        /// 새 RawImage로 화면을 넘기고 대기 중인 페이지의 TTS를 재생한 뒤 PageShown을 발행함.
         /// </summary>
         private void RevealSurfaceAndStartTts(int pageIndex)
         {
-            if (_pendingSurface)
-            {
-                _pendingSurface.enabled = true;
-                _pendingSurface = null;
-            }
-
+            SwapSurface();
             _pendingTtsIndex = -1;
             _isAwaitingTts = false;
+            StartTts(pageIndex);
+            _pageShown.OnNext(pageIndex);
+        }
+
+        /// <summary>
+        /// 새 화면의 RawImage에 Front 텍스처를 연결해 켜고, 이전 화면의 RawImage를 끔.
+        /// </summary>
+        private void SwapSurface()
+        {
+            if (!_pendingSurface) return;
+
+            if (_currentSurface && _currentSurface != _pendingSurface)
+            {
+                _currentSurface.enabled = false;
+                _currentSurface.texture = null;
+            }
+
+            _pendingSurface.texture = _front.Texture;
+            _pendingSurface.enabled = true;
+            _currentSurface = _pendingSurface;
+            _pendingSurface = null;
+        }
+
+        /// <summary>
+        /// 페이지의 TTS 클립이 있으면 재생하고, 영상이 TTS 재생 위치를 따라가게 함.
+        /// </summary>
+        private void StartTts(int pageIndex)
+        {
             if (pageIndex < 0 || pageIndex >= _ttsClips.Length) return;
 
             AudioClip clip = _ttsClips[pageIndex];
@@ -291,29 +462,43 @@ namespace Media
 
             _ttsSource.clip = clip;
             _ttsSource.Play();
-            _isSyncingToTts = _videoPlayer && _videoPlayer.isPlaying;
-            _driftStrikeCount = 0;
-            _nextDriftCheckTime = Time.unscaledTime + _driftCheckIntervalSeconds;
+
+            if (FrontPlayer && FrontPlayer.isPlaying)
+            {
+                BindVideoToTts();
+            }
         }
 
         /// <summary>
-        /// 재생 중인 영상·TTS를 멈추고 RenderTexture를 비우며 현재 화면의 RawImage를 끔.
+        /// 페이지 전환을 시작함. 이전 TTS와 진행 중인 대기만 멈추고, 보이는 영상은 새 첫 프레임이 나올 때까지 그대로 둔다
+        /// (지우거나 숨기면 전환 사이에 검은 틈이 생긴다). 켬이면 Front는 계속 재생된다.
         /// </summary>
-        private void ResetPlayback()
+        private void BeginTransition()
         {
             _pendingTtsIndex = -1;
             _pendingSurface = null;
             _isAwaitingTts = false;
-            _isSyncingToTts = false;
-            _isSeeking = false;
+            _transitionSlot = null;
+            ReleaseVideoFromTts();
 
-            if (_videoPlayer)
+            if (FrontPlayer) FrontPlayer.sendFrameReadyEvents = false;
+            if (_back.Player)
             {
-                _videoPlayer.sendFrameReadyEvents = false;
-                _videoPlayer.Stop();
+                _back.Player.sendFrameReadyEvents = false;
+                _back.IsPriming = false;
             }
 
             if (_ttsSource) _ttsSource.Stop();
+        }
+
+        /// <summary>
+        /// 재생 중인 영상·TTS를 모두 멈추고 텍스처를 비우며 현재 화면의 RawImage를 끔.
+        /// </summary>
+        private void ResetPlayback()
+        {
+            BeginTransition();
+            StopSlot(_slotA);
+            StopSlot(_slotB);
 
             if (_currentSurface)
             {
@@ -321,12 +506,11 @@ namespace Media
                 _currentSurface.texture = null;
                 _currentSurface = null;
             }
-
-            ClearRenderTexture();
         }
 
         /// <summary>
-        /// 공유 RenderTexture를 대상 RawImage에 연결하되 첫 프레임 전까지는 꺼 둔다.
+        /// 새 화면의 RawImage를 기억하고 첫 프레임 전까지는 꺼 둔다. 텍스처는 교체 순간(SwapSurface)에 연결한다.
+        /// 지금 보이는 RawImage와 같으면 끄지 않는다(같은 화면을 다시 띄울 때 검은 틈 방지).
         /// </summary>
         private void AttachSurface(RawImage surface)
         {
@@ -336,21 +520,158 @@ namespace Media
                 return;
             }
 
-            surface.texture = _renderTexture;
-            surface.enabled = false;
-            _currentSurface = surface;
+            if (surface != _currentSurface) surface.enabled = false;
             _pendingSurface = surface;
         }
 
+        #endregion
+
+        #region Loop & Double Buffering
+
         /// <summary>
-        /// 공유 RenderTexture를 투명색으로 지워 이전 영상의 프레임이 남지 않게 함.
+        /// 영상이 끝나면 반복함. 켬이고 Back이 같은 영상을 첫 프레임에 대기 중이면 바로 교체하고, 아니면 프레임 0으로 되돌린다.
+        /// VideoPlayer 자체 반복(isLooping)은 처음으로 돌아간 직후 한 프레임을 이전 프레임이 섞인 채 내보내 쓰지 않는다
+        /// (③ 영상에서 밝기 12→19로 튐, 2026-10-12 측정).
         /// </summary>
-        private void ClearRenderTexture()
+        private void OnLoopPointReached(VideoPlayer source)
         {
-            if (!_renderTexture) return;
+            if (source != FrontPlayer) return;
+
+            if (_isDoubleBuffering && _back.IsPrimed && _back.Player && _back.Player.url == source.url && _currentSurface)
+            {
+                SwapToPrimedBack();
+                return;
+            }
+
+            source.frame = 0;
+            source.Play();
+        }
+
+        /// <summary>
+        /// 첫 프레임에 대기 중인 Back으로 화면을 바로 넘기고 재생을 이어 간 뒤, 이전 Front를 다음 반복용으로 다시 준비함.
+        /// </summary>
+        private void SwapToPrimedBack()
+        {
+            VideoSlot previous = _front;
+            _front = _back;
+            _back = previous;
+
+            _front.IsPrimed = false;
+            _front.Player.playbackSpeed = previous.Player.playbackSpeed;
+            _currentSurface.texture = _front.Texture;
+            _front.Player.Play();
+
+            previous.Player.playbackSpeed = 1f;
+            PrimeBackForLoop();
+        }
+
+        /// <summary>
+        /// Back에 Front와 같은 영상을 첫 프레임까지 재생해 멈춰 둠. 첫 프레임이 오면 OnFrameReady에서 멈춘다.
+        /// </summary>
+        private void PrimeBackForLoop()
+        {
+            if (!_isDoubleBuffering || !_back.Player || !FrontPlayer) return;
+            if (_transitionSlot == _back) return;
+
+            string url = FrontPlayer.url;
+            if (string.IsNullOrEmpty(url)) return;
+
+            EnsureSlotTexture(_back, _back == _slotA ? "PageMediaPlayer_RT_A" : "PageMediaPlayer_RT_B");
+            _back.IsPrimed = false;
+            _back.IsPriming = true;
+            _back.Player.playbackSpeed = 1f;
+            _back.Player.sendFrameReadyEvents = true;
+
+            if (_back.Player.url == url && _back.Player.isPrepared)
+            {
+                _back.Player.frame = 0;
+            }
+            else
+            {
+                _back.Player.url = url;
+            }
+
+            _back.Player.Play();
+        }
+
+        /// <summary>
+        /// Back 플레이어를 멈추고 텍스처를 해제함. 더블 버퍼링을 끌 때 부하와 메모리를 되돌리기 위함.
+        /// </summary>
+        private void ReleaseBackSlot()
+        {
+            StopSlot(_back);
+            if (_back.Texture)
+            {
+                if (_back.Player) _back.Player.targetTexture = null;
+                _back.Texture.Release();
+                DestroyUtil.SafeDestroy(_back.Texture);
+                _back.Texture = null;
+            }
+        }
+
+        /// <summary>
+        /// 슬롯에 텍스처가 없으면 만들어 플레이어 출력에 연결함.
+        /// </summary>
+        private void EnsureSlotTexture(VideoSlot slot, string textureName)
+        {
+            if (slot.Texture || !slot.Player) return;
+
+            slot.Texture = new RenderTexture(Mathf.Max(2, _renderTextureSize.x), Mathf.Max(2, _renderTextureSize.y), 0, RenderTextureFormat.ARGB32);
+            slot.Texture.name = textureName;
+            slot.Texture.Create();
+            ClearRenderTexture(slot.Texture);
+            slot.Player.targetTexture = slot.Texture;
+        }
+
+        /// <summary>
+        /// 슬롯의 재생을 멈추고 대기 상태를 지움.
+        /// </summary>
+        private void StopSlot(VideoSlot slot)
+        {
+            slot.IsPrimed = false;
+            slot.IsPriming = false;
+            if (!slot.Player) return;
+
+            slot.Player.sendFrameReadyEvents = false;
+            slot.Player.playbackSpeed = 1f;
+            slot.Player.Stop();
+            ClearRenderTexture(slot.Texture);
+        }
+
+        /// <summary>
+        /// 슬롯의 이벤트 구독을 풀고 플레이어를 멈추며 텍스처를 해제함.
+        /// </summary>
+        private void ReleaseSlot(VideoSlot slot)
+        {
+            if (slot == null) return;
+
+            if (slot.Player)
+            {
+                slot.Player.errorReceived -= OnVideoError;
+                slot.Player.frameReady -= OnFrameReady;
+                slot.Player.seekCompleted -= OnSeekCompleted;
+                slot.Player.loopPointReached -= OnLoopPointReached;
+                slot.Player.Stop();
+                slot.Player.targetTexture = null;
+            }
+
+            if (slot.Texture)
+            {
+                slot.Texture.Release();
+                DestroyUtil.SafeDestroy(slot.Texture);
+                slot.Texture = null;
+            }
+        }
+
+        /// <summary>
+        /// 텍스처를 투명색으로 지워 이전 영상의 프레임이 남지 않게 함.
+        /// </summary>
+        private static void ClearRenderTexture(RenderTexture texture)
+        {
+            if (!texture) return;
 
             RenderTexture previous = RenderTexture.active;
-            RenderTexture.active = _renderTexture;
+            RenderTexture.active = texture;
             GL.Clear(false, true, Color.clear);
             RenderTexture.active = previous;
         }
@@ -360,51 +681,123 @@ namespace Media
         #region A/V Sync
 
         /// <summary>
-        /// 영상이 TTS보다 허용치 이상 앞서거나 뒤처지면 영상 위치를 TTS 위치로 옮김.
+        /// TTS가 시작될 때 영상과 TTS를 맞추기 시작함.
         /// <para>
-        /// 앱 시작 직후처럼 메인 스레드가 멈추면 영상만 늦어지고 TTS는 계속 나가 둘이 어긋난다.
-        /// 음성을 되감으면 같은 말이 반복되므로 TTS를 기준으로 두고 영상을 맞춘다.
+        /// 영상은 자체 시계(Freerun, 실제 시간)로, TTS는 오디오 DSP 시계로 흘러 조금씩 어긋난다.
+        /// 남는 작은 차이는 재생 속도를 ±10% 안에서 조절해 서서히 없애고, 크게 벌어진 상태가 이어질 때만 한 번 탐색한다.
+        /// ExternalTime 모드는 기준 시간이 크게 뛰면 2초가량 멈추거나 0.1초 늦은 채 고정돼 쓰지 않는다(2026-10-12 측정).
         /// </para>
         /// </summary>
-        private void CorrectVideoDrift()
+        private void BindVideoToTts()
         {
-            if (!_ttsSource || !_ttsSource.isPlaying || !_videoPlayer || !_videoPlayer.isPlaying)
+            _isSyncingToTts = true;
+            _smoothedDrift = 0d;
+            _isSeeking = false;
+            _seekStrikeCount = 0;
+            _nextSeekCheckTime = Time.unscaledTime + _seekCheckIntervalSeconds;
+        }
+
+        /// <summary>
+        /// 동기 맞추기를 끝내고 영상 재생 속도를 원래대로 돌림.
+        /// </summary>
+        private void ReleaseVideoFromTts()
+        {
+            _isSyncingToTts = false;
+            _isSeeking = false;
+            if (_front != null && FrontPlayer) FrontPlayer.playbackSpeed = 1f;
+        }
+
+        /// <summary>
+        /// 매 프레임 영상과 TTS의 차이를 보고 재생 속도를 조절하거나, 크게 벌어지면 탐색함. TTS가 끝나면 원래 속도로 돌림.
+        /// </summary>
+        private void SyncVideoToTts()
+        {
+            if (!FrontPlayer || !_ttsSource || !_ttsSource.isPlaying)
             {
-                _isSyncingToTts = false;
+                ReleaseVideoFromTts();
                 return;
             }
 
-            // seek가 끝나기 전의 time 값은 일시적으로 튀므로 비교하지 않는다.
+            // 탐색이 끝나기 전의 time 값은 일시적으로 튀므로 쓰지 않는다.
             if (_isSeeking) return;
 
-            float now = Time.unscaledTime;
-            if (now < _nextDriftCheckTime) return;
-            _nextDriftCheckTime = now + _driftCheckIntervalSeconds;
+            double target = GetVideoTimeForTts();
+            // time은 보이는 프레임의 시작 시각이라 평균 반 프레임 늦게 보인다. 프레임 가운데로 보정해 비교한다.
+            double drift = WrapDrift(FrontPlayer.time + FrameDuration() * 0.5d - target);
+            _smoothedDrift += (drift - _smoothedDrift) * 0.2d;
 
-            double ttsTime = _ttsSource.time;
-            // TTS가 영상 한 바퀴보다 길면 영상은 이미 처음으로 돌아갔으므로 더 비교하지 않는다.
-            if (ttsTime >= _videoPlayer.length)
+            if (TrySeekOnLargeDrift(drift, target)) return;
+
+            double adjust = Math.Abs(_smoothedDrift) < _speedDeadZoneSeconds ? 0d : -_smoothedDrift * _speedGainPerSecond;
+            if (adjust > _maxSpeedAdjust) adjust = _maxSpeedAdjust;
+            if (adjust < -_maxSpeedAdjust) adjust = -_maxSpeedAdjust;
+            FrontPlayer.playbackSpeed = (float)(1d + adjust);
+        }
+
+        /// <summary>
+        /// 차이가 탐색 기준을 넘은 상태가 두 번 연속 확인되면 영상을 TTS 위치로 탐색함. 탐색했으면 true.
+        /// </summary>
+        private bool TrySeekOnLargeDrift(double drift, double target)
+        {
+            if (Time.unscaledTime < _nextSeekCheckTime) return false;
+            _nextSeekCheckTime = Time.unscaledTime + _seekCheckIntervalSeconds;
+
+            if (Math.Abs(drift) <= _seekThresholdSeconds)
             {
-                _isSyncingToTts = false;
-                return;
+                _seekStrikeCount = 0;
+                return false;
             }
 
-            double drift = _videoPlayer.time - ttsTime;
-            if (Math.Abs(drift) <= _maxAvDriftSeconds)
-            {
-                _driftStrikeCount = 0;
-                return;
-            }
+            // 멈춤 직후에는 영상이 스스로 따라잡는 중일 수 있어 한 번 더 확인한 뒤에 탐색한다.
+            _seekStrikeCount++;
+            if (_seekStrikeCount < 2) return false;
 
-            // VideoPlayer는 멈춤 뒤 프레임을 건너뛰며 스스로 따라잡기도 하므로,
-            // 한 번 어긋난 것만으로 seek하면 따라잡기와 겹쳐 반대로 어긋난다. 두 번 연속일 때만 보정한다.
-            _driftStrikeCount++;
-            if (_driftStrikeCount < 2) return;
-
-            _driftStrikeCount = 0;
+            _seekStrikeCount = 0;
             _isSeeking = true;
-            _videoPlayer.time = ttsTime;
-            if (_logger != null) _logger.ZLogInformation($"[PageMediaPlayer] A/V drift {drift:F3}s corrected. video -> {ttsTime:F3}s");
+            _smoothedDrift = 0d;
+            FrontPlayer.playbackSpeed = 1f;
+            FrontPlayer.time = target;
+            if (_logger != null) _logger.ZLogInformation($"[PageMediaPlayer] A/V drift {drift:F3}s. Seeking video to {target:F3}s.");
+            return true;
+        }
+
+        /// <summary>
+        /// 현재 TTS 재생 위치에 해당하는 영상 시간을 계산함. 영상이 TTS보다 짧으면 반복 위치로 접는다.
+        /// </summary>
+        private double GetVideoTimeForTts()
+        {
+            AudioClip clip = _ttsSource.clip;
+            // time(float)보다 정밀한 샘플 위치를 쓴다.
+            double ttsTime = clip ? (double)_ttsSource.timeSamples / clip.frequency : _ttsSource.time;
+            double videoTime = ttsTime + _videoOffsetSeconds;
+            if (videoTime < 0d) videoTime = 0d;
+
+            double length = FrontPlayer.length;
+            return length > 0d ? videoTime % length : videoTime;
+        }
+
+        /// <summary>
+        /// 반복 경계를 사이에 둔 차이를 가장 짧은 거리로 바꿈. 영상 끝(6.99초)과 다음 바퀴 시작(0.01초)을
+        /// 7초 차이가 아니라 0.02초 차이로 보게 해, TTS가 영상보다 길 때 경계마다 불필요한 탐색을 막는다.
+        /// </summary>
+        private double WrapDrift(double drift)
+        {
+            double length = FrontPlayer.length;
+            if (length <= 0d) return drift;
+
+            double half = length * 0.5d;
+            while (drift > half) drift -= length;
+            while (drift < -half) drift += length;
+            return drift;
+        }
+
+        /// <summary>
+        /// 영상 한 프레임의 길이(초). 프레임 정보가 없으면 30fps로 가정함.
+        /// </summary>
+        private double FrameDuration()
+        {
+            double fps = FrontPlayer.frameRate;
+            return fps > 0d ? 1d / fps : 1d / 30d;
         }
 
         #endregion
@@ -412,49 +805,67 @@ namespace Media
         #region VideoPlayer Setup & Events
 
         /// <summary>
-        /// 영상 소리를 끄고 RenderTexture 출력·반복 재생을 설정하며 이벤트를 한 번만 구독함.
+        /// 영상 소리를 끄고 RenderTexture 출력·수동 반복으로 설정하며 이벤트를 한 번만 구독함.
         /// </summary>
-        private void ConfigureVideoPlayer()
+        private void ConfigureVideoPlayer(VideoPlayer player)
         {
-            _videoPlayer.playOnAwake = false;
-            _videoPlayer.source = VideoSource.Url;
-            _videoPlayer.isLooping = true;
-            _videoPlayer.waitForFirstFrame = true;
-            _videoPlayer.skipOnDrop = true;
-            _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
-            _videoPlayer.targetTexture = _renderTexture;
+            player.playOnAwake = false;
+            player.source = VideoSource.Url;
+            // 자체 반복은 반복 직후 깨진 프레임을 내보내므로 끄고 OnLoopPointReached에서 직접 반복한다.
+            player.isLooping = false;
+            player.waitForFirstFrame = true;
+            player.skipOnDrop = true;
+            player.renderMode = VideoRenderMode.RenderTexture;
             // 영상 파일에 음성이 들어 있어도 재생하지 않는다. 음성은 항상 별도 TTS 파일이다.
-            _videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
-            _videoPlayer.sendFrameReadyEvents = false;
-            _videoPlayer.errorReceived += OnVideoError;
-            _videoPlayer.frameReady += OnFrameReady;
-            _videoPlayer.seekCompleted += OnSeekCompleted;
+            player.audioOutputMode = VideoAudioOutputMode.None;
+            player.sendFrameReadyEvents = false;
+            player.errorReceived += OnVideoError;
+            player.frameReady += OnFrameReady;
+            player.seekCompleted += OnSeekCompleted;
+            player.loopPointReached += OnLoopPointReached;
         }
 
         /// <summary>
-        /// 새 영상의 첫 프레임이 나온 순간 화면을 켜고 TTS를 시작한 뒤 프레임 이벤트를 다시 끔.
+        /// 첫 프레임 이벤트를 처리함. 전환 중인 슬롯이면 화면을 넘기고, 반복 대기 중인 Back이면 첫 프레임에서 멈춘다.
         /// </summary>
         private void OnFrameReady(VideoPlayer source, long frameIdx)
         {
             source.sendFrameReadyEvents = false;
-            RevealSurfaceAndStartTts(_pendingTtsIndex);
+
+            if (_transitionSlot != null && source == _transitionSlot.Player)
+            {
+                // 전환이 겹쳐 대기 중인 페이지가 없으면 늦게 도착한 이전 요청의 이벤트이므로 무시한다.
+                if (_pendingTtsIndex < 0) return;
+                CompleteTransition();
+                return;
+            }
+
+            if (source == _back.Player && _back.IsPriming)
+            {
+                source.Pause();
+                _back.IsPriming = false;
+                _back.IsPrimed = true;
+            }
         }
 
         /// <summary>
-        /// 보정 seek가 끝났음을 기록하고 다음 검사를 한 주기 뒤로 미룸.
+        /// 동기 맞추기용 탐색이 끝났음을 기록하고, 다음 탐색 판단을 한 주기 뒤로 미룸.
         /// </summary>
         private void OnSeekCompleted(VideoPlayer source)
         {
+            if (source != FrontPlayer) return;
+
             _isSeeking = false;
-            _nextDriftCheckTime = Time.unscaledTime + _driftCheckIntervalSeconds;
+            _nextSeekCheckTime = Time.unscaledTime + _seekCheckIntervalSeconds;
         }
 
         /// <summary>
-        /// 영상 오류를 기록하고 준비 대기를 끝냄.
+        /// 영상 오류를 기록함. 전환 중인 슬롯이면 준비 대기를 끝내고, 반복 대기 중이면 대기를 취소한다.
         /// </summary>
         private void OnVideoError(VideoPlayer source, string message)
         {
-            _prepareFailed = true;
+            if (_transitionSlot != null && source == _transitionSlot.Player) _prepareFailed = true;
+            if (source == _back.Player) _back.IsPriming = false;
             if (_logger != null) _logger.ZLogError($"[PageMediaPlayer] Video error: {source.url} / {message}");
         }
 
