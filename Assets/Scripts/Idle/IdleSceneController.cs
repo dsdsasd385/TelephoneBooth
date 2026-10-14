@@ -13,6 +13,7 @@ using R3;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using VContainer;
 using HuliacDev.App;
@@ -41,7 +42,8 @@ namespace Idle
     /// </para>
     /// <para>
     /// 페이지 규칙(작업계획서 5·6장): 화면에 들어가면 버튼을 숨기고, TTS가 끝나면 페이드인한 뒤에야 누를 수 있다.
-    /// 버튼이 없는 ⑤는 TTS가 끝나고 _autoAdvanceDelaySeconds만큼 기다린 뒤 ⑥으로 자동 진행한다. ② 나이 선택은 난이도를, ⑥은 콘텐츠를 ExperienceSession에 기록한다.
+    /// 버튼이 없는 ⑤는 TTS가 끝나고 _autoAdvanceDelaySeconds만큼 기다린 뒤 ⑥으로 자동 진행한다.
+    /// ② 나이 선택은 어느 버튼이든 ③으로 가며 기록하지 않는다. ⑥은 미션을 ExperienceSession에 기록하고 그 미션 씬으로 이동하며, 홈 버튼은 ① 대기로 돌아간다.
     /// </para>
     /// <para>
     /// 화면 교체: ShowScreen은 영상 준비만 요청하고, 새 영상의 첫 프레임이 나왔다는 PageShown을 받은 순간
@@ -56,7 +58,6 @@ namespace Idle
         private const int WaitingScreenIndex = 0;
         private const int AgeSelectScreenIndex = 1;
         private const int AutoAdvanceScreenIndex = 4;
-        private const int ContentSelectScreenIndex = 5;
 
         #endregion
 
@@ -75,10 +76,11 @@ namespace Idle
         [Header("③·④ 다음")]
         [SerializeField] private Button[] _nextButtons = Array.Empty<Button>();
 
-        [Header("⑥ 콘텐츠 선택")]
+        [Header("⑥ 미션 선택")]
         [SerializeField] private Button _cultureButton;
         [SerializeField] private Button _truthButton;
         [SerializeField] private Button _nationButton;
+        [SerializeField] private Button _homeButton;
 
         #endregion
 
@@ -106,6 +108,7 @@ namespace Idle
         private UnityAction _onCultureClicked;
         private UnityAction _onTruthClicked;
         private UnityAction _onNationClicked;
+        private UnityAction _onHomeClicked;
 
         #endregion
 
@@ -372,12 +375,13 @@ namespace Idle
         /// </summary>
         private void BindButtons()
         {
-            _onUnder14Clicked = OnUnder14Clicked;
-            _onOver14Clicked = OnOver14Clicked;
+            _onUnder14Clicked = OnAgeSelected;
+            _onOver14Clicked = OnAgeSelected;
             _onNextClicked = OnNextClicked;
             _onCultureClicked = OnCultureClicked;
             _onTruthClicked = OnTruthClicked;
             _onNationClicked = OnNationClicked;
+            _onHomeClicked = OnHomeClicked;
 
             AddListener(_under14Button, _onUnder14Clicked, nameof(_under14Button));
             AddListener(_over14Button, _onOver14Clicked, nameof(_over14Button));
@@ -388,6 +392,7 @@ namespace Idle
             AddListener(_cultureButton, _onCultureClicked, nameof(_cultureButton));
             AddListener(_truthButton, _onTruthClicked, nameof(_truthButton));
             AddListener(_nationButton, _onNationClicked, nameof(_nationButton));
+            AddListener(_homeButton, _onHomeClicked, nameof(_homeButton));
         }
 
         /// <summary>
@@ -404,6 +409,7 @@ namespace Idle
             RemoveListener(_cultureButton, _onCultureClicked);
             RemoveListener(_truthButton, _onTruthClicked);
             RemoveListener(_nationButton, _onNationClicked);
+            RemoveListener(_homeButton, _onHomeClicked);
         }
 
         /// <summary>
@@ -430,19 +436,12 @@ namespace Idle
         }
 
         /// <summary>
-        /// 14세 미만을 고르면 저난이도로 기록하고 다음 화면으로 감.
+        /// ② 나이 선택. 난이도가 없어져 어느 버튼이든 기록 없이 ③으로 감.
         /// </summary>
-        private void OnUnder14Clicked()
+        private void OnAgeSelected()
         {
-            SelectDifficulty(Difficulty.Low);
-        }
-
-        /// <summary>
-        /// 14세 이상을 고르면 고난이도로 기록하고 다음 화면으로 감.
-        /// </summary>
-        private void OnOver14Clicked()
-        {
-            SelectDifficulty(Difficulty.High);
+            LockCurrentButtons();
+            ShowScreen(AgeSelectScreenIndex + 1);
         }
 
         /// <summary>
@@ -455,51 +454,49 @@ namespace Idle
         }
 
         /// <summary>
-        /// 문화수호를 고름.
+        /// 미션1(문화수호)을 고름.
         /// </summary>
         private void OnCultureClicked()
         {
-            SelectContent(ContentType.Culture);
+            SelectContent(ContentType.Culture, Constants.Scenes.Mission1);
         }
 
         /// <summary>
-        /// 진실수호를 고름.
+        /// 미션2(진실수호)를 고름.
         /// </summary>
         private void OnTruthClicked()
         {
-            SelectContent(ContentType.Truth);
+            SelectContent(ContentType.Truth, Constants.Scenes.Mission2);
         }
 
         /// <summary>
-        /// 민족수호를 고름.
+        /// 미션3(민족수호)을 고름.
         /// </summary>
         private void OnNationClicked()
         {
-            SelectContent(ContentType.Nation);
+            SelectContent(ContentType.Nation, Constants.Scenes.Mission3);
         }
 
         /// <summary>
-        /// 난이도를 세션에 기록하고 ③으로 진행함.
+        /// ⑥ 홈 버튼으로 ① 대기로 돌아감. 수화기는 들려 있으므로 ①의 "이미 들려 있음" 규칙을 따른다(작업계획서 4.3).
         /// </summary>
-        private void SelectDifficulty(Difficulty difficulty)
+        private void OnHomeClicked()
         {
             LockCurrentButtons();
-            if (_session != null) _session.SetDifficulty(difficulty);
-            if (_logger != null) _logger.ZLogInformation($"[IdleSceneController] Difficulty selected: {difficulty}");
-            ShowScreen(AgeSelectScreenIndex + 1);
+            if (_logger != null) _logger.ZLogInformation($"[IdleSceneController] Home button clicked. Returning to waiting screen.");
+            if (_moveIdlePublisher != null) _moveIdlePublisher.Publish(new MoveIdleEvent());
+            ShowScreen(WaitingScreenIndex);
         }
 
         /// <summary>
-        /// 콘텐츠를 세션에 기록함. 콘텐츠 씬은 아직 없어 이동하지 않고 ⑥에 머문다.
+        /// 미션을 세션에 기록하고 그 미션 씬으로 이동함.
         /// </summary>
-        private void SelectContent(ContentType content)
+        private void SelectContent(ContentType content, string sceneName)
         {
             LockCurrentButtons();
             if (_session != null) _session.SetContent(content);
-            if (_logger != null)
-            {
-                _logger.ZLogInformation($"[IdleSceneController] Content selected: {content} (difficulty {(_session != null ? _session.Difficulty : Difficulty.None)}). Content scenes are not created yet; staying on screen {ContentSelectScreenIndex}.");
-            }
+            if (_logger != null) _logger.ZLogInformation($"[IdleSceneController] Mission selected: {content}. Loading scene {sceneName}.");
+            SceneManager.LoadScene(sceneName);
         }
 
         #endregion

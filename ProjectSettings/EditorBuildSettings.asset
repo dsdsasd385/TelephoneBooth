@@ -8,6 +8,15 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/0_Idle.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 1
+    path: Assets/Scenes/Culture_high.unity
+    guid: 941d0759f8d981c49a6aba35ff4e8213
+  - enabled: 1
+    path: Assets/Scenes/TruthBtn_high.unity
+    guid: bc9172fba7a021d4f97c0a9314ed63c8
+  - enabled: 1
+    path: Assets/Scenes/Nation_high.unity
+    guid: 1799ebaed183f2a49b92e1ef219b001c
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 9f78b7facb922924c8049e2822f2fe70,
       type: 3}
