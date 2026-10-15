@@ -14,6 +14,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 using VContainer;
 using HuliacDev.App;
@@ -37,13 +38,13 @@ namespace Idle
     /// 0_Idle 씬의 흐름을 관리하는 씬 매니저.
     /// IdlePages.json으로 화면별 영상·TTS를 적용하고, 수화기와 버튼 입력에 따라 화면을 바꾼다.
     /// <para>
-    /// 수화기 규칙(작업계획서 4.3): ① 대기에서 들면 ② 나이 선택으로 가고, ②–⑥에서 내려놓으면
-    /// MoveIdleEvent를 발행하고 ① 대기로 즉시 돌아간다.
+    /// 수화기 규칙(작업계획서 4.3): ① 대기에서 들면 ② 안내로 가고, ②–⑤에서 내려놓으면
+    /// MoveIdleEvent를 발행하고 ① 대기로 즉시 돌아간다. 나이 선택 화면은 삭제했다.
     /// </para>
     /// <para>
     /// 페이지 규칙(작업계획서 5·6장): 화면에 들어가면 버튼을 숨기고, TTS가 끝나면 페이드인한 뒤에야 누를 수 있다.
-    /// 버튼이 없는 ⑤는 TTS가 끝나고 _autoAdvanceDelaySeconds만큼 기다린 뒤 ⑥으로 자동 진행한다.
-    /// ② 나이 선택은 어느 버튼이든 ③으로 가며 기록하지 않는다. ⑥은 미션을 ExperienceSession에 기록하고 그 미션 씬으로 이동하며, 홈 버튼은 ① 대기로 돌아간다.
+    /// 버튼이 없는 ④는 TTS가 끝나고 _autoAdvanceDelaySeconds만큼 기다린 뒤 ⑤로 자동 진행한다.
+    /// ⑤는 미션을 ExperienceSession에 기록하고 그 미션 씬으로 이동하며, 홈 버튼은 ① 대기로 돌아간다.
     /// </para>
     /// <para>
     /// 화면 교체: ShowScreen은 영상 준비만 요청하고, 새 영상의 첫 프레임이 나왔다는 PageShown을 받은 순간
@@ -56,8 +57,8 @@ namespace Idle
         #region Constants
 
         private const int WaitingScreenIndex = 0;
-        private const int AgeSelectScreenIndex = 1;
-        private const int AutoAdvanceScreenIndex = 4;
+        private const int FirstGuideScreenIndex = 1;
+        private const int AutoAdvanceScreenIndex = 3;
 
         #endregion
 
@@ -66,20 +67,16 @@ namespace Idle
         [SerializeField] private PageMediaPlayer _mediaPlayer;
         [SerializeField] private IdleScreenView[] _screens = Array.Empty<IdleScreenView>();
         [SerializeField] private float _buttonFadeSeconds = 0.5f;
-        // ⑤의 TTS가 끝난 뒤 ⑥으로 자동 진행하기 전에 기다리는 시간(초). 0이면 바로 넘어간다.
-        [SerializeField, Min(0f)] private float _autoAdvanceDelaySeconds = 1f;
+        // ④의 TTS가 끝난 뒤 ⑤로 자동 진행하기 전에 기다리는 시간(초). 0이면 바로 넘어간다.
+        [SerializeField, Min(0f)] private float _autoAdvanceDelaySeconds = 1.5f;
 
-        [Header("② 나이 선택")]
-        [SerializeField] private Button _under14Button;
-        [SerializeField] private Button _over14Button;
-
-        [Header("③·④ 다음")]
+        [Header("②·③ 다음")]
         [SerializeField] private Button[] _nextButtons = Array.Empty<Button>();
 
-        [Header("⑥ 미션 선택")]
-        [SerializeField] private Button _cultureButton;
-        [SerializeField] private Button _truthButton;
-        [SerializeField] private Button _nationButton;
+        [Header("⑤ 미션 선택")]
+        [SerializeField, FormerlySerializedAs("_cultureButton")] private Button _mission1Button;
+        [SerializeField, FormerlySerializedAs("_truthButton")] private Button _mission2Button;
+        [SerializeField, FormerlySerializedAs("_nationButton")] private Button _mission3Button;
         [SerializeField] private Button _homeButton;
 
         #endregion
@@ -102,12 +99,10 @@ namespace Idle
         private int _currentIndex = -1;
         private int _visibleIndex = -1;
 
-        private UnityAction _onUnder14Clicked;
-        private UnityAction _onOver14Clicked;
         private UnityAction _onNextClicked;
-        private UnityAction _onCultureClicked;
-        private UnityAction _onTruthClicked;
-        private UnityAction _onNationClicked;
+        private UnityAction _onMission1Clicked;
+        private UnityAction _onMission2Clicked;
+        private UnityAction _onMission3Clicked;
         private UnityAction _onHomeClicked;
 
         #endregion
@@ -340,7 +335,7 @@ namespace Idle
         }
 
         /// <summary>
-        /// ① 대기에서 수화기를 들면 ② 나이 선택으로 진행함.
+        /// ① 대기에서 수화기를 들면 ② 안내로 진행함.
         /// </summary>
         private void OnReceiverLifted()
         {
@@ -350,12 +345,12 @@ namespace Idle
                 return;
             }
 
-            if (_logger != null) _logger.ZLogInformation($"[IdleSceneController] Receiver lifted on waiting screen. Moving to age selection.");
-            ShowScreen(AgeSelectScreenIndex);
+            if (_logger != null) _logger.ZLogInformation($"[IdleSceneController] Receiver lifted on waiting screen. Moving to guide screen.");
+            ShowScreen(FirstGuideScreenIndex);
         }
 
         /// <summary>
-        /// ②–⑥에서 수화기를 내려놓으면 대기 화면 복귀 이벤트를 발행하고 ① 대기로 즉시 돌아감.
+        /// ②–⑤에서 수화기를 내려놓으면 대기 화면 복귀 이벤트를 발행하고 ① 대기로 즉시 돌아감.
         /// </summary>
         private void OnReceiverHungUp()
         {
@@ -375,23 +370,19 @@ namespace Idle
         /// </summary>
         private void BindButtons()
         {
-            _onUnder14Clicked = OnAgeSelected;
-            _onOver14Clicked = OnAgeSelected;
             _onNextClicked = OnNextClicked;
-            _onCultureClicked = OnCultureClicked;
-            _onTruthClicked = OnTruthClicked;
-            _onNationClicked = OnNationClicked;
+            _onMission1Clicked = OnMission1Clicked;
+            _onMission2Clicked = OnMission2Clicked;
+            _onMission3Clicked = OnMission3Clicked;
             _onHomeClicked = OnHomeClicked;
 
-            AddListener(_under14Button, _onUnder14Clicked, nameof(_under14Button));
-            AddListener(_over14Button, _onOver14Clicked, nameof(_over14Button));
             for (int i = 0; i < _nextButtons.Length; i++)
             {
                 AddListener(_nextButtons[i], _onNextClicked, nameof(_nextButtons));
             }
-            AddListener(_cultureButton, _onCultureClicked, nameof(_cultureButton));
-            AddListener(_truthButton, _onTruthClicked, nameof(_truthButton));
-            AddListener(_nationButton, _onNationClicked, nameof(_nationButton));
+            AddListener(_mission1Button, _onMission1Clicked, nameof(_mission1Button));
+            AddListener(_mission2Button, _onMission2Clicked, nameof(_mission2Button));
+            AddListener(_mission3Button, _onMission3Clicked, nameof(_mission3Button));
             AddListener(_homeButton, _onHomeClicked, nameof(_homeButton));
         }
 
@@ -400,15 +391,13 @@ namespace Idle
         /// </summary>
         private void UnbindButtons()
         {
-            RemoveListener(_under14Button, _onUnder14Clicked);
-            RemoveListener(_over14Button, _onOver14Clicked);
             for (int i = 0; i < _nextButtons.Length; i++)
             {
                 RemoveListener(_nextButtons[i], _onNextClicked);
             }
-            RemoveListener(_cultureButton, _onCultureClicked);
-            RemoveListener(_truthButton, _onTruthClicked);
-            RemoveListener(_nationButton, _onNationClicked);
+            RemoveListener(_mission1Button, _onMission1Clicked);
+            RemoveListener(_mission2Button, _onMission2Clicked);
+            RemoveListener(_mission3Button, _onMission3Clicked);
             RemoveListener(_homeButton, _onHomeClicked);
         }
 
@@ -436,16 +425,7 @@ namespace Idle
         }
 
         /// <summary>
-        /// ② 나이 선택. 난이도가 없어져 어느 버튼이든 기록 없이 ③으로 감.
-        /// </summary>
-        private void OnAgeSelected()
-        {
-            LockCurrentButtons();
-            ShowScreen(AgeSelectScreenIndex + 1);
-        }
-
-        /// <summary>
-        /// ③·④의 다음 버튼으로 다음 화면으로 감.
+        /// ②·③의 다음 버튼으로 다음 화면으로 감.
         /// </summary>
         private void OnNextClicked()
         {
@@ -456,7 +436,7 @@ namespace Idle
         /// <summary>
         /// 미션1(문화수호)을 고름.
         /// </summary>
-        private void OnCultureClicked()
+        private void OnMission1Clicked()
         {
             SelectContent(ContentType.Culture, Constants.Scenes.Mission1);
         }
@@ -464,7 +444,7 @@ namespace Idle
         /// <summary>
         /// 미션2(진실수호)를 고름.
         /// </summary>
-        private void OnTruthClicked()
+        private void OnMission2Clicked()
         {
             SelectContent(ContentType.Truth, Constants.Scenes.Mission2);
         }
@@ -472,13 +452,13 @@ namespace Idle
         /// <summary>
         /// 미션3(민족수호)을 고름.
         /// </summary>
-        private void OnNationClicked()
+        private void OnMission3Clicked()
         {
             SelectContent(ContentType.Nation, Constants.Scenes.Mission3);
         }
 
         /// <summary>
-        /// ⑥ 홈 버튼으로 ① 대기로 돌아감. 수화기는 들려 있으므로 ①의 "이미 들려 있음" 규칙을 따른다(작업계획서 4.3).
+        /// ⑤ 홈 버튼으로 ① 대기로 돌아감. 수화기는 들려 있으므로 ①의 "이미 들려 있음" 규칙을 따른다(작업계획서 4.3).
         /// </summary>
         private void OnHomeClicked()
         {
@@ -551,7 +531,7 @@ namespace Idle
         }
 
         /// <summary>
-        /// TTS가 끝나기를 기다렸다가 버튼을 페이드인하거나, ⑤라면 다음 화면으로 넘어감.
+        /// TTS가 끝나기를 기다렸다가 버튼을 페이드인하거나, ④라면 다음 화면으로 넘어감.
         /// </summary>
         private async UniTaskVoid RunScreenFlowAsync(int index, CancellationTokenSource cts)
         {

@@ -1,7 +1,7 @@
 namespace Core
 {
     /// <summary>
-    /// 0_Idle ⑥에서 고르는 미션. 미션1 = 문화수호, 미션2 = 진실수호, 미션3 = 민족수호.
+    /// 0_Idle ⑤에서 고르는 미션. 미션1 = 문화수호, 미션2 = 진실수호, 미션3 = 민족수호.
     /// </summary>
     public enum ContentType
     {

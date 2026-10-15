@@ -8,10 +8,10 @@ namespace App
         public static class Scenes
         {
             public const string Idle = "0_Idle";
-            // 미션 씬. 파일 이름은 가칭(작업계획서 3장)이라 바꾸면 여기만 고친다.
-            public const string Mission1 = "Culture_high";
-            public const string Mission2 = "TruthBtn_high";
-            public const string Mission3 = "Nation_high";
+            // 미션 씬. 미션1 = 문화수호, 미션2 = 진실수호, 미션3 = 민족수호. 씬 이름을 바꾸면 여기만 고친다.
+            public const string Mission1 = "Mission1";
+            public const string Mission2 = "Mission2";
+            public const string Mission3 = "Mission3";
         }
 
         public static class Files

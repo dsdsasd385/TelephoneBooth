@@ -531,7 +531,7 @@ namespace Media
         /// <summary>
         /// 영상이 끝나면 반복함. 켬이고 Back이 같은 영상을 첫 프레임에 대기 중이면 바로 교체하고, 아니면 프레임 0으로 되돌린다.
         /// VideoPlayer 자체 반복(isLooping)은 처음으로 돌아간 직후 한 프레임을 이전 프레임이 섞인 채 내보내 쓰지 않는다
-        /// (③ 영상에서 밝기 12→19로 튐, 2026-10-12 측정).
+        /// (당시 메인03, 현재 메인02 영상에서 밝기 12→19로 튐, 2026-10-12 측정).
         /// </summary>
         private void OnLoopPointReached(VideoPlayer source)
         {

@@ -8,7 +8,7 @@
 - 전시명: 전화부스
 - 설치 장소: 천안 독립기념관
 - 0_Startup 템플릿 기반. 진행 상황은 `인수인계.md` 맨 위 "지금 상태"를 먼저 읽는다.
-- 씬: `0_Idle` 하나뿐이다(빌드 첫 씬). 화면 6개(Canvas 아래)와 `IdleLifetimeScope`·`PageMediaPlayer`·`IdleSceneController`(씬 매니저)가 있다. 씬마다 `{씬}SceneController` + `{씬}LifetimeScope` 구성을 따른다.
+- 씬: `0_Idle` 하나뿐이다(빌드 첫 씬). 화면 5개(Canvas 아래 `1_TitleScreen`·`2`·`3`·`4`·`5_SelectScreen`)와 `IdleLifetimeScope`·`PageMediaPlayer`·`IdleSceneController`(씬 매니저)가 있다. 씬마다 `{씬}SceneController` + `{씬}LifetimeScope` 구성을 따른다.
 
 ## 하드웨어·외부 연동
 <!-- 센서, RFID, 시리얼, API 엔드포인트 -->

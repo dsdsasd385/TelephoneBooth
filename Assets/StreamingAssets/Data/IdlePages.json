@@ -1,10 +1,9 @@
 {
   "pages": [
     { "screen": "1_TitleScreen",    "video": "Video/IDLE 영상_메인01.mp4", "tts": "Audio/Idle/IDLE_TTS_메인01.wav" },
-    { "screen": "2_CheckAgeScreen", "video": "Video/IDLE 영상_메인02.mp4", "tts": "" },
+    { "screen": "2",                "video": "Video/IDLE 영상_메인02.mp4", "tts": "Audio/Idle/IDLE_TTS_메인02.wav" },
     { "screen": "3",                "video": "Video/IDLE 영상_메인03.mp4", "tts": "Audio/Idle/IDLE_TTS_메인03.wav" },
     { "screen": "4",                "video": "Video/IDLE 영상_메인04.mp4", "tts": "Audio/Idle/IDLE_TTS_메인04.wav" },
-    { "screen": "5",                "video": "Video/IDLE 영상_메인05.mp4", "tts": "Audio/Idle/IDLE_TTS_메인05.wav" },
-    { "screen": "6_SelectScreen",   "video": "Video/IDLE 영상_메인06.mp4", "tts": "Audio/Idle/IDLE_TTS_메인06.wav" }
+    { "screen": "5_SelectScreen",   "video": "Video/IDLE 영상_메인05.mp4", "tts": "Audio/Idle/IDLE_TTS_메인05.wav" }
   ]
 }
