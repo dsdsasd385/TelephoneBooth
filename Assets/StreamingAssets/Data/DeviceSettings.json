@@ -1,0 +1,5 @@
+{
+  "useArduino": false,
+  "receiverRequestIntervalMs": 100,
+  "receiverResponseTimeoutMs": 1000
+}

@@ -1,0 +1,17 @@
+{
+  "pages": [
+    { "screen": "TitleScreen",        "video": "Video/Mission1/Mission1_TitleScreen.mp4", "tts": "" },
+    { "screen": "SelectScreen1",      "video": "", "tts": "" },
+    { "screen": "SelectScreen2",      "video": "", "tts": "" },
+    { "screen": "SelectScreen3",      "video": "", "tts": "" },
+    { "screen": "VideoScreen",        "video": "Video/Mission1/Mission1_VideoScreen.mp4", "tts": "" },
+    { "screen": "HistoryScreen",      "video": "", "tts": "" },
+    { "screen": "EndSelectScreen",    "video": "", "tts": "" },
+    { "screen": "OtherMissionScreen", "video": "", "tts": "" }
+  ],
+  "stages": [
+    { "screen": "SelectScreen1", "choiceTts": ["", "", ""] },
+    { "screen": "SelectScreen2", "choiceTts": ["", "", ""] },
+    { "screen": "SelectScreen3", "choiceTts": ["", "", ""] }
+  ]
+}

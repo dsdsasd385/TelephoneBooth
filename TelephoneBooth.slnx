@@ -1,5 +1,7 @@
 ﻿<Solution>
+  <Project Path="Assembly-CSharp.csproj" />
   <Project Path="DOTween.Modules.csproj" />
   <Project Path="VHierarchy.csproj" />
-  <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="TelephoneBooth.TextInput.csproj" />
+  <Project Path="TelephoneBooth.Tests.EditMode.csproj" />
 </Solution>

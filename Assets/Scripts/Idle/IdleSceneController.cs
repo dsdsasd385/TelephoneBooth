@@ -206,6 +206,16 @@ namespace Idle
             }
 
             _isInitialized = true;
+
+            // 미션 씬의 홈 버튼으로 돌아왔으면 ② 안내부터 시작한다. 그사이 수화기를 내려놓았으면 ① 대기로.
+            bool isGuideReturn = _session != null && _session.ConsumeGuideReturn();
+            if (isGuideReturn && _receiverInput != null && _receiverInput.IsLifted.CurrentValue)
+            {
+                if (_logger != null) _logger.ZLogInformation($"[IdleSceneController] Returned from mission by home button. Starting at guide screen.");
+                ShowScreen(FirstGuideScreenIndex);
+                return;
+            }
+
             ShowScreen(WaitingScreenIndex);
 
             if (_receiverInput != null && _receiverInput.IsLifted.CurrentValue && _logger != null)

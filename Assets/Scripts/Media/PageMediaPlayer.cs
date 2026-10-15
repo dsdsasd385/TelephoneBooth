@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -90,11 +91,17 @@ namespace Media
 
         private string[] _videoUrls = Array.Empty<string>();
         private AudioClip[] _ttsClips = Array.Empty<AudioClip>();
+        // 페이지에 속하지 않는 피드백 TTS 등 LoadClipAsync로 읽은 클립. 파괴할 때 함께 해제한다.
+        private readonly List<AudioClip> _extraClips = new List<AudioClip>();
 
         // 페이지 전환 요청 번호. 전환마다 CancellationTokenSource를 새로 만들지 않고
         // 번호 비교로 이전 요청을 무효화해 전환당 힙 할당을 없앤다.
         private int _playRequestId;
         private int _pendingTtsIndex = -1;
+        // 보이는 페이지의 영상을 반복하는지 여부. false면 끝까지 한 번 재생한 뒤 마지막 프레임에 멈춘다.
+        // 전환 중에는 이전 페이지 값을 유지하다가 새 첫 프레임이 나올 때(CompleteTransition) 바꾼다.
+        private bool _isLooping = true;
+        private bool _pendingIsLooping = true;
         // Play 요청부터 TTS가 실제로 시작(또는 TTS 없음 확정)될 때까지 true. 영상 준비 중에도
         // IsTtsPlaying이 true로 유지되어, 호출자가 TTS 종료를 기다릴 때 준비 시간을 종료로 오인하지 않는다.
         private bool _isAwaitingTts;
@@ -111,6 +118,7 @@ namespace Media
         private int _seekStrikeCount;
         private float _nextSeekCheckTime;
         private readonly Subject<int> _pageShown = new Subject<int>();
+        private readonly Subject<Unit> _videoLoopCompleted = new Subject<Unit>();
 
         private ILogger<PageMediaPlayer> _logger;
 
@@ -136,6 +144,16 @@ namespace Media
         /// 화면 루트 교체는 이 시점에 해야 전환 중 검은 틈이 생기지 않는다. 다른 페이지 요청에 밀린 요청은 발행되지 않는다.
         /// </summary>
         public Observable<int> PageShown => _pageShown;
+
+        /// <summary>
+        /// 보이는 영상이 끝까지 재생된 순간(다시 처음으로 돌아가기 직전)마다 발행함. 영상을 한 번 본 뒤 넘어가는 페이지에서 쓴다.
+        /// </summary>
+        public Observable<Unit> VideoLoopCompleted => _videoLoopCompleted;
+
+        /// <summary>
+        /// 보이는 영상이 재생 중인지 여부. 영상이 없거나 준비에 실패한 페이지는 false.
+        /// </summary>
+        public bool IsVideoPlaying => _front != null && FrontPlayer && FrontPlayer.isPlaying;
 
         // 화면에 보이는 플레이어. 동기 맞추기는 이 플레이어에만 적용한다.
         private VideoPlayer FrontPlayer => _front.Player;
@@ -211,7 +229,9 @@ namespace Media
             ReleaseSlot(_slotA);
             ReleaseSlot(_slotB);
             ReleaseClips();
+            ReleaseExtraClips();
             _pageShown.Dispose();
+            _videoLoopCompleted.Dispose();
         }
 
         #endregion
@@ -245,8 +265,12 @@ namespace Media
 
         /// <summary>
         /// 지정한 페이지의 영상을 대상 RawImage에 재생하고, 첫 프레임이 나오면 TTS를 시작하고 PageShown을 발행함.
+        /// <para>
+        /// isLooping이 false면 영상을 한 번만 재생하고 마지막 프레임에 멈춘다(VideoLoopCompleted는 그때 한 번 발행).
+        /// 영상을 다 본 뒤 다음 화면으로 넘어가는 페이지에서, 넘어가기 전 처음부터 다시 재생되는 장면이 보이지 않게 한다.
+        /// </para>
         /// </summary>
-        public void Play(int pageIndex, RawImage surface)
+        public void Play(int pageIndex, RawImage surface, bool isLooping = true)
         {
             if (pageIndex < 0 || pageIndex >= _videoUrls.Length)
             {
@@ -255,6 +279,7 @@ namespace Media
             }
 
             _playRequestId++;
+            _pendingIsLooping = isLooping;
             PlayAsync(_playRequestId, pageIndex, surface, this.GetCancellationTokenOnDestroy()).Forget();
         }
 
@@ -265,6 +290,43 @@ namespace Media
         {
             _playRequestId++;
             ResetPlayback();
+        }
+
+        /// <summary>
+        /// 영상 없이 이미지로만 된 페이지에 들어갈 때 호출함. 보이던 영상을 멈추고 그 페이지의 TTS만 재생한다.
+        /// 영상 첫 프레임을 기다리지 않으므로 PageShown을 발행하지 않으며, 호출자가 같은 프레임에 화면 루트를 바꾼다.
+        /// </summary>
+        public void PlayTtsOnly(int pageIndex)
+        {
+            Stop();
+            StartTts(pageIndex);
+        }
+
+        /// <summary>
+        /// 재생 중인 TTS를 끊고 주어진 클립을 재생함. 오답·정답 같은 피드백 TTS용(작업계획서 5장: 피드백 TTS는 이전 TTS를 끊는다).
+        /// 영상 동기 맞추기는 하지 않는다. 클립이 없으면 TTS만 멈춘다.
+        /// </summary>
+        public void PlayClip(AudioClip clip)
+        {
+            ReleaseVideoFromTts();
+            if (!_ttsSource) return;
+
+            _ttsSource.Stop();
+            if (!clip) return;
+
+            _ttsSource.clip = clip;
+            _ttsSource.Play();
+        }
+
+        /// <summary>
+        /// 페이지에 속하지 않는 TTS 파일(StreamingAssets 상대 경로)을 읽어 AudioClip으로 돌려줌.
+        /// 경로가 비었거나 읽지 못하면 null. 읽은 클립은 이 재생기가 파괴될 때 함께 해제된다.
+        /// </summary>
+        public async UniTask<AudioClip> LoadClipAsync(string relativePath, CancellationToken cancellationToken)
+        {
+            AudioClip clip = await LoadAudioClipAsync(relativePath, cancellationToken);
+            if (clip) _extraClips.Add(clip);
+            return clip;
         }
 
         /// <summary>
@@ -405,6 +467,7 @@ namespace Media
                 previous.IsPriming = false;
             }
 
+            _isLooping = _pendingIsLooping;
             int pageIndex = _pendingTtsIndex;
             RevealSurfaceAndStartTts(pageIndex);
 
@@ -537,6 +600,11 @@ namespace Media
         {
             if (source != FrontPlayer) return;
 
+            _videoLoopCompleted.OnNext(Unit.Default);
+
+            // 한 번만 재생하는 페이지는 되돌리지 않는다. isLooping이 꺼져 있어 플레이어는 마지막 프레임을 보인 채 멈춘다.
+            if (!_isLooping) return;
+
             if (_isDoubleBuffering && _back.IsPrimed && _back.Player && _back.Player.url == source.url && _currentSurface)
             {
                 SwapToPrimedBack();
@@ -572,6 +640,8 @@ namespace Media
         {
             if (!_isDoubleBuffering || !_back.Player || !FrontPlayer) return;
             if (_transitionSlot == _back) return;
+            // 한 번만 재생하는 페이지는 반복할 일이 없어 미리 준비하지 않는다.
+            if (!_isLooping) return;
 
             string url = FrontPlayer.url;
             if (string.IsNullOrEmpty(url)) return;
@@ -878,7 +948,16 @@ namespace Media
         /// </summary>
         private async UniTask LoadTtsAsync(int pageIndex, string relativePath, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrEmpty(relativePath)) return;
+            AudioClip clip = await LoadAudioClipAsync(relativePath, cancellationToken);
+            if (clip) _ttsClips[pageIndex] = clip;
+        }
+
+        /// <summary>
+        /// StreamingAssets 상대 경로의 오디오 파일을 읽어 AudioClip을 만듦. 경로가 비었거나 실패하면 null.
+        /// </summary>
+        private async UniTask<AudioClip> LoadAudioClipAsync(string relativePath, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(relativePath)) return null;
 
             string uri = new Uri(ToStreamingAssetsPath(relativePath)).AbsoluteUri;
             using (UnityWebRequest request = UnityWebRequestMultimedia.GetAudioClip(uri, GetAudioType(relativePath)))
@@ -890,7 +969,7 @@ namespace Media
                 catch (UnityWebRequestException e)
                 {
                     if (_logger != null) _logger.ZLogError($"[PageMediaPlayer] Failed to load TTS: {relativePath} / {e.Error}");
-                    return;
+                    return null;
                 }
 
                 using (LoadTtsMarker.Auto())
@@ -899,13 +978,26 @@ namespace Media
                     if (!clip)
                     {
                         if (_logger != null) _logger.ZLogWarning($"[PageMediaPlayer] TTS clip is null: {relativePath}");
-                        return;
+                        return null;
                     }
 
                     clip.name = Path.GetFileNameWithoutExtension(relativePath);
-                    _ttsClips[pageIndex] = clip;
+                    return clip;
                 }
             }
+        }
+
+        /// <summary>
+        /// LoadClipAsync로 읽은 클립을 모두 파괴함.
+        /// </summary>
+        private void ReleaseExtraClips()
+        {
+            for (int i = 0; i < _extraClips.Count; i++)
+            {
+                DestroyUtil.SafeDestroy(_extraClips[i]);
+            }
+
+            _extraClips.Clear();
         }
 
         /// <summary>

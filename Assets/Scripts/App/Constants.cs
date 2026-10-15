@@ -12,6 +12,8 @@ namespace App
             public const string Mission1 = "Mission1";
             public const string Mission2 = "Mission2";
             public const string Mission3 = "Mission3";
+            // 공용 종료 흐름(메시지 입력). 아직 씬이 없어 미션 마무리의 "메시지 보내기"는 0_Idle로 대신 간다.
+            public const string Message = "9_Message";
         }
 
         public static class Files
@@ -20,6 +22,26 @@ namespace App
             public const string IdlePages = "Data/IdlePages.json";
             // 영상 재생 방식(더블 버퍼링 on/off) 설정.
             public const string MediaSettings = "Data/MediaSettings.json";
+            // 미션1(문화수호) 페이지별 영상·TTS와 선택지 피드백 TTS.
+            public const string Mission1Content = "Data/Mission1Content.json";
+            // PC마다 바꾸는 장치 설정(수화기 입력 방식·아두이노 요청 주기·응답 제한 시간).
+            public const string DeviceSettings = "Data/DeviceSettings.json";
+            // 9_Message 메시지 입력 설정(최대 글자 수).
+            public const string MessageSettings = "Data/MessageSettings.json";
+        }
+
+        // 수화기 아두이노 시리얼 프로토콜(작업계획서 4.2). 줄 단위 텍스트이며 펌웨어와 글자 하나까지 맞춰야 한다.
+        public static class Arduino
+        {
+            // 통신 속도. 펌웨어의 Serial.begin 값과 같아야 한다.
+            public const int BaudRate = 9600;
+            // 아두이노가 시작할 때 보내는 식별 문자열(대소문자 구분).
+            public const string Handshake = "Telephone_Booth";
+            // PC → 아두이노 상태 요청.
+            public const string RequestState = "State";
+            // 아두이노 → PC 응답. On = 수화기가 걸려 있음(내려놓음), Off = 들려 있음.
+            public const string ResponseHungUp = "On";
+            public const string ResponseLifted = "Off";
         }
     }
 }
