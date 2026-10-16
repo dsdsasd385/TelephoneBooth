@@ -24,6 +24,8 @@ namespace App
             public const string MediaSettings = "Data/MediaSettings.json";
             // 미션1(문화수호) 페이지별 영상·TTS와 선택지 피드백 TTS.
             public const string Mission1Content = "Data/Mission1Content.json";
+            // 미션2(진실수호) 대사 화면별 대사 TTS.
+            public const string Mission2Content = "Data/Mission2Content.json";
             // PC마다 바꾸는 장치 설정(수화기 입력 방식·아두이노 요청 주기·응답 제한 시간).
             public const string DeviceSettings = "Data/DeviceSettings.json";
             // 9_Message 메시지 입력 설정(최대 글자 수).
