@@ -77,7 +77,7 @@ namespace Mission
         }
 
         /// <summary>
-        /// 피드백 문구 Sprite로 바로 바꿈. 비어 있으면 Sprite는 그대로 둔다. shake가 true면 가로로 흔든다.
+        /// 피드백 문구 Sprite로 바로 바꿈. 비어 있으면 Sprite는 그대로 둔다(호출자가 이미 바꾼 경우). shake가 true면 가로로 흔든다.
         /// </summary>
         public void ShowFeedback(Sprite sprite, bool shake)
         {

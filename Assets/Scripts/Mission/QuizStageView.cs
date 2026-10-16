@@ -183,6 +183,15 @@ namespace Mission
         }
 
         /// <summary>
+        /// 선택지 클릭만 막거나 다시 받음. 버튼이 비활성 색으로 바뀌지 않게 interactable은 건드리지 않는다.
+        /// 오답 피드백 TTS가 끝날 때까지 다른 선택지를 누르지 못하게 할 때 쓴다.
+        /// </summary>
+        public void SetChoicesBlocked(bool isBlocked)
+        {
+            if (_choicesGroup) _choicesGroup.blocksRaycasts = !isBlocked;
+        }
+
+        /// <summary>
         /// 고른 선택지에 선택 표시를 함. 1·2단계는 다른 선택지의 표시를 지우고, 3단계는 오답 표시를 남긴다.
         /// 오답이고 wrongSprite가 있으면 버튼 이미지를 바꾼다.
         /// </summary>

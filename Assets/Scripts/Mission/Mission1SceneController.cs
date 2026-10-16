@@ -50,9 +50,9 @@ namespace Mission
     /// 타이틀·영상 화면은 TTS가 끝나고 영상을 한 번 다 본 뒤 자동으로 넘어간다. 역사 화면은 확인 버튼으로 넘어간다.
     /// </para>
     /// <para>
-    /// 단계 규칙(7.2): 화면 TTS가 끝나면 선택지가 페이드인된다. 오답은 TitleBox를 그 오답 문구로 바꾸고 흔든 뒤
-    /// 오답 TTS가 끝나면(TTS가 없으면 흔들림이 끝나면) 기본 문구로 돌린다. 정답은 정답 문구로 바꾸고 선택지를 잠근 뒤
-    /// 정답 TTS가 끝나면 Next를 페이드인한다. 피드백 TTS는 이전 TTS를 끊는다.
+    /// 단계 규칙(7.2): 화면 TTS가 끝나면 선택지가 페이드인된다. 오답은 TitleBox를 그 오답 문구로 바꾸고 흔들며 선택지 클릭을 막고,
+    /// 오답 TTS가 끝나면(TTS가 없으면 흔들림이 끝나면) 기본 문구로 돌리고 선택지를 다시 받는다. 정답은 정답 문구로 바꾸고 선택지를 잠근 뒤
+    /// 정답 TTS가 끝나면 Next를 페이드인한다. 피드백 TTS는 이전 TTS(화면 TTS)를 끊는다.
     /// </para>
     /// <para>
     /// 수화기를 내려놓으면 MoveIdleEvent를 발행하고 0_Idle ① 대기로 간다(4.3). 홈 버튼은 0_Idle ② 안내로 간다.
@@ -495,6 +495,8 @@ namespace Mission
             }
             else
             {
+                // 오답 TTS가 끝날 때까지 다른 선택지를 누르지 못하게 한다.
+                stage.SetChoicesBlocked(true);
                 if (stage.TitleBox) stage.TitleBox.ShowFeedback(stage.GetFeedbackTitle(choiceIndex), true);
                 _mediaPlayer.PlayClip(clip);
                 RunWrongFeedbackAsync(stage, clip != null, _feedbackCts).Forget();
@@ -522,8 +524,8 @@ namespace Mission
         }
 
         /// <summary>
-        /// 오답 TTS가 끝나면(없으면 흔들림이 끝나면) TitleBox를 기본 문구로 되돌림.
-        /// 다른 선택지를 누르면 취소되고, 그 선택지의 피드백이 이어받는다.
+        /// 오답 TTS가 끝나면(없으면 흔들림이 끝나면) TitleBox를 기본 문구로 되돌리고 선택지를 다시 누를 수 있게 함.
+        /// 화면을 떠나 취소되면 선택지는 막힌 채로 두고, 다음에 들어올 때 ResetState·페이드인이 다시 연다.
         /// </summary>
         private async UniTaskVoid RunWrongFeedbackAsync(QuizStageView stage, bool hasTts, CancellationTokenSource cts)
         {
@@ -539,10 +541,11 @@ namespace Mission
                 }
 
                 if (stage.TitleBox) stage.TitleBox.ShowDefault();
+                stage.SetChoicesBlocked(false);
             }
             catch (OperationCanceledException)
             {
-                // 다른 선택지를 눌렀거나 화면을 떠나 취소됨. 원복은 이어받은 쪽(또는 ResetState)이 한다.
+                // 화면을 떠나 취소됨. 원복은 ResetState·선택지 페이드인이 한다.
             }
             finally
             {

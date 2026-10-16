@@ -1,17 +1,17 @@
 {
   "pages": [
-    { "screen": "TitleScreen",        "video": "Video/Mission1/Mission1_TitleScreen.mp4", "tts": "" },
-    { "screen": "SelectScreen1",      "video": "", "tts": "" },
-    { "screen": "SelectScreen2",      "video": "", "tts": "" },
-    { "screen": "SelectScreen3",      "video": "", "tts": "" },
-    { "screen": "VideoScreen",        "video": "Video/Mission1/Mission1_VideoScreen.mp4", "tts": "" },
-    { "screen": "HistoryScreen",      "video": "", "tts": "" },
+    { "screen": "TitleScreen",        "video": "Video/Mission1/Mission1_TitleScreen.mp4", "tts": "Audio/Mission1/미션1_01.wav" },
+    { "screen": "SelectScreen1",      "video": "", "tts": "Audio/Mission1/미션1_02_1_수정.wav" },
+    { "screen": "SelectScreen2",      "video": "", "tts": "Audio/Mission1/미션1_03_1.wav" },
+    { "screen": "SelectScreen3",      "video": "", "tts": "Audio/Mission1/미션1_04_1_수정.mp3" },
+    { "screen": "VideoScreen",        "video": "Video/Mission1/Mission1_VideoScreen.mp4", "tts": "Audio/Mission1/미션1_05_발자국소리.wav" },
+    { "screen": "HistoryScreen",      "video": "", "tts": "Audio/Mission1/미션1_06.wav" },
     { "screen": "EndSelectScreen",    "video": "", "tts": "" },
     { "screen": "OtherMissionScreen", "video": "", "tts": "" }
   ],
   "stages": [
-    { "screen": "SelectScreen1", "choiceTts": ["", "", ""] },
-    { "screen": "SelectScreen2", "choiceTts": ["", "", ""] },
-    { "screen": "SelectScreen3", "choiceTts": ["", "", ""] }
+    { "screen": "SelectScreen1", "choiceTts": ["Audio/Mission1/미션1_02_2.wav", "Audio/Mission1/미션1_02_3.wav", "Audio/Mission1/미션1_02_4.wav"] },
+    { "screen": "SelectScreen2", "choiceTts": ["Audio/Mission1/미션1_03_2.wav", "Audio/Mission1/미션1_03_3_수정.wav", "Audio/Mission1/미션1_03-4_수정.wav"] },
+    { "screen": "SelectScreen3", "choiceTts": ["Audio/Mission1/미션1_04_2.wav", "Audio/Mission1/미션1_04_3.wav", "Audio/Mission1/미션1_04_4.wav"] }
   ]
 }
