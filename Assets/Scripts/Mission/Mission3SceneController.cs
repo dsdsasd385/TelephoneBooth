@@ -26,12 +26,15 @@ namespace Mission
     /// <para>
     /// Guide1: 안내 TTS가 끝나면 Guide2로. Guide2: TTS와 동시에 Title1MapImage의 아웃라인 5개가 차례로 나타난다(버튼 입력 없음).
     /// TTS가 끝나면 TitleImage1을 끄고 SelectScreen(TitleImage2)을 BG 없이 Guide2 위에 겹쳐 켠 뒤, TTS와 동시에 Guide2 지도(Title1MapImage)를
-    /// Title2MapImage 자리·크기로 옮긴다(CipherMapView.MorphTo: 지도·아웃라인·버튼이 각각 Title2MapImage의 같은 요소 값으로, Scale은 1 유지). 도착하면 Title2MapImage를 보여 주고(_mapSwapFadeSeconds 크로스페이드) Guide2를 끈다.
+    /// Title2MapImage 자리·크기로 옮긴다(CipherMapView.MorphTo: 지도·아웃라인·버튼이 각각 Title2MapImage의 같은 요소 위치·크기·투명도로, Scale은 1 유지). 도착하면 같은 프레임에 Title2MapImage를 보여 주고 Guide2를 끈다(_mapSwapFadeSeconds가 0보다 크면 크로스페이드).
     /// 지도가 도착하기 전에는 SelectScreen 지도가 보이지 않아 중간에 지도 Sprite가 바뀌는 순간이 보이지 않는다(두 BG는 같은 검정 단색).
     /// 이어서 PasswordImage 페이드 → 암호 타이핑 → PawwordTable 페이드. 연출과 TTS가 모두 끝나야 지도 버튼을 누를 수 있다.
     /// </para>
     /// <para>
-    /// 지도 버튼을 누르면 선택 표시를 켜고 바로 판정한다. 정답(_answerButton, 다리 밑)이면 정답 효과음을 재생한다(그 뒤 화면은 아직 없다).
+    /// 지도 버튼을 누르면 선택 표시를 켜고 바로 판정한다. 정답(_answerButton, 다리 밑)이면 정답 효과음과 함께 SuccessScreen을 SelectScreen 위에 겹쳐 켜고,
+    /// SuccessScreen의 PasswordImage를 SelectScreen 암호 자리에서 제자리로 옮기며(DOMove, InQuad) 배경을 페이드인한다.
+    /// 같은 이미지·같은 암호가 같은 자리에서 시작해 바뀌는 순간이 보이지 않는다. 이어서 암호 사이 공백 벌리기(13 30 14 39 15 39 0022) →
+    /// 해독 자모 한 글자씩 페이드인. 그 뒤 화면은 아직 없다.
     /// 오답이면 FailScreen(오답 문구를 TitleBoxView로 가로로 흔듦)과 오답 TTS를 보여 준 뒤 SelectScreen으로 돌아와 다시 고르게 한다.
     /// </para>
     /// <para>
@@ -78,11 +81,24 @@ namespace Mission
         // 정답 장소 버튼(SelectScreen 지도의 3_RiverBtn, 다리 밑).
         [SerializeField] private Button _answerButton;
 
+        [Header("SuccessScreen")]
+        [SerializeField] private GameObject _successScreen;
+        // 정답 연출 동안 0에서 페이드인해 아래 SelectScreen을 가리는 배경.
+        [SerializeField] private Graphic _successBackground;
+        // SelectScreen 암호 자리에서 제자리로 옮겨지는 PasswordImage.
+        [SerializeField] private RectTransform _successPassword;
+        [SerializeField] private PasswordTextView _successPasswordText;
+        // 해독 자모(ㄷ ㅏ ㄹ ㅣ …).
+        [SerializeField] private FadeInTextView _successHint;
+        [SerializeField, Min(0f)] private float _successMoveSeconds = 1f;
+        [SerializeField] private Ease _successMoveEase = Ease.InQuad;
+
         [Header("연출")]
         [SerializeField, Min(0f)] private float _mapMoveSeconds = 1f;
         [SerializeField] private Ease _mapMoveEase = Ease.InOutQuad;
         // Guide2 지도가 도착한 뒤 SelectScreen 지도로 바꾸는 크로스페이드 시간(초). 0이면 바로 바꾼다.
-        [SerializeField, Min(0f)] private float _mapSwapFadeSeconds = 0.3f;
+        // 겹치는 동안 지도 바깥의 투명한 모서리로 아래 지도가 비쳐 깜빡여 보이므로 0으로 둔다.
+        [SerializeField, Min(0f)] private float _mapSwapFadeSeconds;
         [SerializeField, Min(0f)] private float _fadeSeconds = 0.5f;
 
         [Header("시간")]
@@ -112,6 +128,9 @@ namespace Mission
         private AudioClip _failClip;
         private AudioClip _correctClip;
         private Sequence _introSequence;
+        // SuccessScreen PasswordImage의 씬 위치(월드)와 배경의 씬 알파. 정답 연출의 도착점·끝 값.
+        private Vector3 _successPasswordPosition;
+        private float _successBackgroundAlpha = 1f;
         private bool _isInitialized;
         private bool _isLeaving;
         private bool _isSolved;
@@ -154,6 +173,7 @@ namespace Mission
             // 0_Idle을 거치지 않고 이 씬에서 바로 플레이해도 세션에 현재 미션이 남게 한다.
             if (_session != null) _session.SetContent(ContentType.Nation);
 
+            CacheSuccessDefaults();
             HideAllPages();
             ShowGuidePlaceholder();
             BindEvents();
@@ -413,7 +433,12 @@ namespace Mission
                 await PlayIntroSequenceAsync(DOTween.Sequence().Append(_introMap.MorphTo(_selectMap, _mapMoveSeconds, _mapMoveEase)), token);
             }
 
-            if (_selectMap) await PlayIntroSequenceAsync(DOTween.Sequence().Append(_selectMap.Group.DOFade(1f, _mapSwapFadeSeconds)), token);
+            if (_selectMap)
+            {
+                // Guide2 지도가 위치·크기·투명도까지 SelectScreen 지도와 같아진 상태라 바로 바꿔도 달라 보이지 않는다.
+                if (_mapSwapFadeSeconds > 0f) await PlayIntroSequenceAsync(DOTween.Sequence().Append(_selectMap.Group.DOFade(1f, _mapSwapFadeSeconds)), token);
+                else _selectMap.Group.alpha = 1f;
+            }
 
             ShowRoot(_selectScreen);
             RestoreTransitionState();
@@ -489,6 +514,33 @@ namespace Mission
         }
 
         /// <summary>
+        /// SuccessScreen PasswordImage의 씬 위치와 배경 알파를 기억함. 정답 연출이 바꾸기 전에 한 번 부른다.
+        /// </summary>
+        private void CacheSuccessDefaults()
+        {
+            if (_successPassword) _successPasswordPosition = _successPassword.position;
+            if (_successBackground) _successBackgroundAlpha = _successBackground.color.a;
+        }
+
+        /// <summary>
+        /// 정답 연출 시작 상태로 맞춤. PasswordImage는 SelectScreen 암호와 같은 자리, 암호는 공백 없이 모두, 자모는 숨김, 배경은 투명.
+        /// 두 PasswordImage는 피벗(왼쪽 위)·크기가 같아 피벗 위치를 맞추면 겹친다.
+        /// </summary>
+        private void PrepareSuccessScreen()
+        {
+            if (_successPassword) _successPassword.position = _passwordGroup ? _passwordGroup.transform.position : _successPasswordPosition;
+            if (_successPasswordText) _successPasswordText.ShowAll();
+            if (_successHint) _successHint.ResetState();
+
+            if (_successBackground)
+            {
+                Color color = _successBackground.color;
+                color.a = 0f;
+                _successBackground.color = color;
+            }
+        }
+
+        /// <summary>
         /// 다른 화면 루트를 모두 끄고 새 화면 루트를 켬. 지도 이동 중에는 Guide2와 SelectScreen이 함께 켜져 있어 둘 다 정리한다.
         /// </summary>
         private void ShowRoot(GameObject root)
@@ -499,6 +551,7 @@ namespace Mission
             SetScreenActive(_mapScreen, root);
             SetScreenActive(_selectScreen, root);
             SetScreenActive(_failScreen, root);
+            SetScreenActive(_successScreen, root);
         }
 
         /// <summary>
@@ -527,6 +580,7 @@ namespace Mission
             if (_mapScreen) _mapScreen.SetActive(false);
             if (_selectScreen) _selectScreen.SetActive(false);
             if (_failScreen) _failScreen.SetActive(false);
+            if (_successScreen) _successScreen.SetActive(false);
         }
 
         /// <summary>
@@ -659,14 +713,37 @@ namespace Mission
         }
 
         /// <summary>
-        /// 정답: 정답 효과음을 재생함. 그 뒤 화면은 아직 없다.
+        /// 정답: 효과음과 함께 SuccessScreen을 겹쳐 켜고 PasswordImage를 SelectScreen 암호 자리에서 제자리로 옮긴 뒤(배경 페이드인 동시),
+        /// SelectScreen을 끄고 암호 사이 공백 벌리기 → 해독 자모 페이드인. 효과음까지 끝나면 마친다(그 뒤 화면은 아직 없다).
         /// </summary>
         private async UniTaskVoid RunCorrectAsync(CancellationTokenSource cts)
         {
+            CancellationToken token = cts.Token;
+
             try
             {
                 _mediaPlayer.PlayClip(_correctClip);
-                if (_correctClip) await UniTask.WaitUntil(_isTtsFinished, PlayerLoopTiming.Update, cts.Token);
+                UniTask sfx = _correctClip ? UniTask.WaitUntil(_isTtsFinished, PlayerLoopTiming.Update, token) : UniTask.CompletedTask;
+
+                if (_successScreen)
+                {
+                    PrepareSuccessScreen();
+
+                    // SelectScreen은 켜 둔 채 SuccessScreen을 위에 겹친다. 배경이 다 덮으면 SelectScreen을 끈다.
+                    _successScreen.SetActive(true);
+
+                    Sequence move = DOTween.Sequence();
+                    if (_successPassword) move = move.Join(_successPassword.DOMove(_successPasswordPosition, _successMoveSeconds).SetEase(_successMoveEase));
+                    if (_successBackground) move = move.Join(_successBackground.DOFade(_successBackgroundAlpha, _successMoveSeconds));
+                    await PlayIntroSequenceAsync(move, token);
+
+                    ShowRoot(_successScreen);
+
+                    if (_successPasswordText) await _successPasswordText.PlaySplitAsync(token);
+                    if (_successHint) await _successHint.PlayAsync(token);
+                }
+
+                await sfx;
                 if (_logger != null) _logger.ZLogInformation($"[Mission3SceneController] Password solved. Next screen is not implemented yet.");
             }
             catch (OperationCanceledException)

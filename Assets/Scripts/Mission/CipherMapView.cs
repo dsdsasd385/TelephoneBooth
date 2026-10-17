@@ -67,6 +67,10 @@ namespace Mission
         private Vector3[] _morphFromMax = Array.Empty<Vector3>();
         private Vector3[] _morphToMin = Array.Empty<Vector3>();
         private Vector3[] _morphToMax = Array.Empty<Vector3>();
+        // MorphTo가 투명도를 맞추는 그래픽(아웃라인, 버튼 Image 순)과 시작·목표 알파.
+        private Graphic[] _morphGraphics = Array.Empty<Graphic>();
+        private float[] _morphFromAlpha = Array.Empty<float>();
+        private float[] _morphToAlpha = Array.Empty<float>();
         private readonly Vector3[] _corners = new Vector3[4];
         private float _morphProgress;
         private bool _isInputEnabled;
@@ -201,6 +205,7 @@ namespace Mission
         /// <summary>
         /// 지도·아웃라인·버튼을 target 지도의 같은 순번 요소 위치·크기로 각각 옮기는 트윈을 만듦(Scale은 1 그대로).
         /// 요소마다 월드 사각형을 보간해 offset으로 적용하므로, 두 지도의 앵커·안쪽 배치가 달라도 끝나는 순간 target과 정확히 겹친다.
+        /// 아웃라인·버튼 투명도도 target의 씬 값으로 함께 바꿔, 끝나는 순간 target으로 바로 바꿔도 달라 보이는 곳이 없다.
         /// target은 시작할 때의 배치를 목표로 쓴다. 되돌리기는 RestoreLayout.
         /// </summary>
         public Tween MorphTo(CipherMapView target, float seconds, Ease ease)
@@ -225,12 +230,35 @@ namespace Mission
                 GetWorldRect(target._layoutRects[i], out _morphToMin[i], out _morphToMax[i]);
             }
 
+            // 목표 알파는 target의 현재 값이 아니라 씬 값을 쓴다(target은 등장 전이라 숨겨져 있을 수 있다).
+            int outlineCount = Mathf.Min(_outlines.Length, target._outlines.Length);
+            int buttonCount = Mathf.Min(_buttonGraphics.Length, target._buttonGraphics.Length);
+            _morphGraphics = new Graphic[outlineCount + buttonCount];
+            _morphFromAlpha = new float[_morphGraphics.Length];
+            _morphToAlpha = new float[_morphGraphics.Length];
+            for (int i = 0; i < outlineCount; i++)
+            {
+                _morphGraphics[i] = _outlines[i];
+                _morphToAlpha[i] = target._outlineAlphas[i];
+            }
+
+            for (int i = 0; i < buttonCount; i++)
+            {
+                _morphGraphics[outlineCount + i] = _buttonGraphics[i];
+                _morphToAlpha[outlineCount + i] = target._buttonAlphas[i];
+            }
+
+            for (int i = 0; i < _morphGraphics.Length; i++)
+            {
+                _morphFromAlpha[i] = _morphGraphics[i] ? _morphGraphics[i].color.a : 1f;
+            }
+
             _morphProgress = 0f;
             return DOTween.To(GetMorphProgress, SetMorphProgress, 1f, seconds).SetEase(ease);
         }
 
         /// <summary>
-        /// MorphTo로 바꾼 지도·아웃라인·버튼을 씬 배치로 되돌림.
+        /// MorphTo로 바꾼 지도·아웃라인·버튼을 씬 배치·투명도로 되돌림.
         /// </summary>
         public void RestoreLayout()
         {
@@ -242,6 +270,16 @@ namespace Mission
 
                 rect.offsetMin = _layoutOffsetMins[i];
                 rect.offsetMax = _layoutOffsetMaxs[i];
+            }
+
+            for (int i = 0; i < _outlines.Length; i++)
+            {
+                SetAlpha(_outlines[i], _outlineAlphas[i]);
+            }
+
+            for (int i = 0; i < _buttonGraphics.Length; i++)
+            {
+                SetAlpha(_buttonGraphics[i], _buttonAlphas[i]);
             }
         }
 
@@ -364,11 +402,16 @@ namespace Mission
         }
 
         /// <summary>
-        /// 진행도에 맞춰 요소마다 시작·목표 월드 사각형을 보간해 적용함. DOTween.To의 setter.
+        /// 진행도에 맞춰 요소마다 시작·목표 월드 사각형과 투명도를 보간해 적용함. DOTween.To의 setter.
         /// </summary>
         private void SetMorphProgress(float progress)
         {
             _morphProgress = progress;
+            for (int i = 0; i < _morphGraphics.Length; i++)
+            {
+                SetAlpha(_morphGraphics[i], Mathf.LerpUnclamped(_morphFromAlpha[i], _morphToAlpha[i], progress));
+            }
+
             for (int i = 0; i < _morphFromMin.Length; i++)
             {
                 RectTransform rect = _layoutRects[i];
