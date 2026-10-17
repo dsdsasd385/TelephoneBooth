@@ -1,6 +1,7 @@
 using Core;
 using Data;
 using Hardware;
+using Network;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
@@ -28,6 +29,16 @@ namespace App
             ConfigureManagers(builder);
             ConfigureReceiverInput(builder);
             ConfigureSession(builder);
+            ConfigureMessageSender(builder);
+        }
+
+        /// <summary>
+        /// 메시지 TCP 전송 서비스를 등록함. 씬이 바뀌어도 재시도·재전송이 이어지도록 루트 스코프 싱글톤 진입점으로 둔다.
+        /// DeviceSettings는 ConfigureReceiverInput에서 등록한 인스턴스를 쓴다.
+        /// </summary>
+        private void ConfigureMessageSender(IContainerBuilder builder)
+        {
+            builder.RegisterEntryPoint<MessageSender>(Lifetime.Singleton).AsSelf();
         }
 
         /// <summary>

@@ -1,5 +1,6 @@
 {
   "maxLength": 30,
   "nameMaxLength": 10,
-  "loadingVideo": "Video/Message/수호메시지_로딩영상_v2.mp4"
+  "loadingVideo": "Video/Message/수호메시지_로딩영상_v2.mp4",
+  "idleReturnDelaySeconds": 2
 }

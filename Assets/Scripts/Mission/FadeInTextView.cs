@@ -10,7 +10,7 @@ namespace Mission
 {
     /// <summary>
     /// 텍스트의 글자를 앞에서부터 하나씩 페이드인함(미션3 SuccessScreen의 해독 자모 "ㄷ ㅏ ㄹ ㅣ …").
-    /// 씬에 적어 둔 텍스트·배치를 그대로 쓰며, 공백은 건너뛰고 보이는 글자에만 TMP alpha 태그를 붙인다.
+    /// 씬에 적어 둔 텍스트나 SetText로 넘긴 텍스트를 쓰며, 공백·리치 텍스트 태그는 건너뛰고 보이는 글자에만 TMP alpha 태그를 붙인다.
     /// </summary>
     [RequireComponent(typeof(TMP_Text))]
     public class FadeInTextView : MonoBehaviour
@@ -36,6 +36,8 @@ namespace Mission
         private string _source;
         // 글자별 알파(0–1). 공백은 쓰지 않는다.
         private float[] _alphas = Array.Empty<float>();
+        // 글자별 페이드 대상 여부. 공백과 리치 텍스트 태그 안의 글자는 그대로 쓴다.
+        private bool[] _isFadeChar = Array.Empty<bool>();
         private Tween _tween;
         private float _progress;
 
@@ -54,6 +56,16 @@ namespace Mission
         #endregion
 
         #region Public Methods
+
+        /// <summary>
+        /// 표시할 텍스트를 바꾸고 모든 글자를 숨김. 리치 텍스트 태그(pos 등)를 넣을 수 있으며 태그는 페이드하지 않는다.
+        /// </summary>
+        public void SetText(string text)
+        {
+            CacheSource();
+            SetSource(text);
+            ResetState();
+        }
 
         /// <summary>
         /// 모든 글자를 숨김.
@@ -76,7 +88,7 @@ namespace Mission
             int visibleCount = 0;
             for (int i = 0; i < _source.Length; i++)
             {
-                if (!char.IsWhiteSpace(_source[i])) visibleCount++;
+                if (_isFadeChar[i]) visibleCount++;
             }
 
             if (visibleCount == 0) return;
@@ -101,7 +113,7 @@ namespace Mission
             int order = 0;
             for (int i = 0; i < _source.Length; i++)
             {
-                if (char.IsWhiteSpace(_source[i])) continue;
+                if (!_isFadeChar[i]) continue;
 
                 float start = order * _charIntervalSeconds;
                 _alphas[i] = _charFadeSeconds > 0f ? Mathf.Clamp01((elapsed - start) / _charFadeSeconds) : (elapsed >= start ? 1f : 0f);
@@ -121,7 +133,7 @@ namespace Mission
                 for (int i = 0; i < _source.Length; i++)
                 {
                     char c = _source[i];
-                    if (!char.IsWhiteSpace(c))
+                    if (_isFadeChar[i])
                     {
                         int alpha = Mathf.RoundToInt(_alphas[i] * 255f);
                         builder.Append("<alpha=#");
@@ -145,8 +157,26 @@ namespace Mission
             if (_source != null) return;
 
             _text = GetComponent<TMP_Text>();
-            _source = _text.text ?? string.Empty;
+            SetSource(_text.text);
+        }
+
+        /// <summary>
+        /// 원래 텍스트를 바꾸고 글자마다 페이드 대상인지 정함. 공백과 &lt;…&gt; 태그 안의 글자는 대상이 아니다.
+        /// </summary>
+        private void SetSource(string text)
+        {
+            _source = text ?? string.Empty;
             _alphas = new float[_source.Length];
+            _isFadeChar = new bool[_source.Length];
+
+            bool inTag = false;
+            for (int i = 0; i < _source.Length; i++)
+            {
+                char c = _source[i];
+                if (c == '<') inTag = true;
+                _isFadeChar[i] = !inTag && !char.IsWhiteSpace(c);
+                if (c == '>') inTag = false;
+            }
         }
 
         /// <summary>

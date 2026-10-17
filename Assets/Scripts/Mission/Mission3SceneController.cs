@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using App;
 using Core;
@@ -10,6 +11,9 @@ using Media;
 using MessagePipe;
 using Microsoft.Extensions.Logging;
 using R3;
+using Cysharp.Text;
+using TextInput;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -22,6 +26,19 @@ using ZLogger;
 namespace Mission
 {
     /// <summary>
+    /// 미션3 정답 후보 하나. 자모(ㄷㅏㄹㅣㅁㅣㅌ)를 암호표에서 찾아 PasswordText 숫자를 만들고, 그 장소의 지도 버튼을 누르면 정답이다.
+    /// 정답이면 SuccessScreen/Text (TMP)에 이 자모를 숫자 아래에 맞춰 보여 준다.
+    /// </summary>
+    [Serializable]
+    public struct CipherAnswer
+    {
+        // 자모를 차례로(공백은 무시). 뒤에 모음이 오지 않는 자음은 받침으로 찾는다.
+        public string jamo;
+        // SelectScreen 지도(Title2MapImage)의 장소 버튼.
+        public Button button;
+    }
+
+    /// <summary>
     /// 미션3(민족수호) 씬의 흐름을 관리하는 씬 매니저. Guide1 → Guide2 → SelectScreen(암호 풀이) 순서로 진행한다.
     /// <para>
     /// Guide1: 안내 TTS가 끝나면 Guide2로. Guide2: TTS와 동시에 Title1MapImage의 아웃라인 5개가 차례로 나타난다(버튼 입력 없음).
@@ -31,10 +48,12 @@ namespace Mission
     /// 이어서 PasswordImage 페이드 → 암호 타이핑 → PawwordTable 페이드. 연출과 TTS가 모두 끝나야 지도 버튼을 누를 수 있다.
     /// </para>
     /// <para>
-    /// 지도 버튼을 누르면 선택 표시를 켜고 바로 판정한다. 정답(_answerButton, 다리 밑)이면 정답 효과음과 함께 SuccessScreen을 SelectScreen 위에 겹쳐 켜고,
+    /// SelectScreen에 들어갈 때마다 정답 후보(_answers: 다리밑·산사이) 중 하나를 골라(_isRandomAnswer면 무작위, 아니면 첫 번째 = 다리밑) 그 자모를 암호표(CipherCodec)에서 찾아 숫자를 만든다.
+    /// 지도 버튼을 누르면 선택 표시를 켜고 바로 판정한다. 정답(고른 후보의 장소 버튼)이면 정답 효과음과 함께 SuccessScreen을 SelectScreen 위에 겹쳐 켜고,
     /// SuccessScreen의 PasswordImage를 SelectScreen 암호 자리에서 제자리로 옮기며(DOMove, InQuad) 배경을 페이드인한다.
-    /// 같은 이미지·같은 암호가 같은 자리에서 시작해 바뀌는 순간이 보이지 않는다. 이어서 암호 사이 공백 벌리기(13 30 14 39 15 39 0022) →
-    /// 해독 자모 한 글자씩 페이드인. 그 뒤 화면은 아직 없다.
+    /// 같은 이미지·같은 암호가 같은 자리에서 시작해 바뀌는 순간이 보이지 않는다. 이어서 암호 토큰 사이 공백 벌리기(13 30 14 39 15 39 0022) →
+    /// 해독 자모를 각 토큰 숫자 아래 가운데에 놓고 한 글자씩 페이드인. 효과음까지 끝나고 _endDelaySeconds(1초) 뒤
+    /// 마무리 선택 화면(MissionEndView: 메시지 보내기 → 9_Message, 다른 미션 → 미션1·2)으로 넘어간다.
     /// 오답이면 FailScreen(오답 문구를 TitleBoxView로 가로로 흔듦)과 오답 TTS를 보여 준 뒤 SelectScreen으로 돌아와 다시 고르게 한다.
     /// </para>
     /// <para>
@@ -49,7 +68,8 @@ namespace Mission
         private const int GuidePageIndex = 0;
         private const int MapPageIndex = 1;
         private const int SelectPageIndex = 2;
-        private const int PageCount = 3;
+        private const int EndPageIndex = 3;
+        private const int PageCount = 4;
 
         #endregion
 
@@ -78,8 +98,10 @@ namespace Mission
         [SerializeField] private CanvasGroup _passwordGroup;
         [SerializeField] private PasswordTextView _passwordText;
         [SerializeField] private CanvasGroup _tableGroup;
-        // 정답 장소 버튼(SelectScreen 지도의 3_RiverBtn, 다리 밑).
-        [SerializeField] private Button _answerButton;
+        // 정답 후보(ㄷㅏㄹㅣㅁㅣㅌ → 3_RiverBtn, ㅅㅏㄴㅅㅏㅇㅣ → 2_MountainBtn). SelectScreen에 들어갈 때마다 하나를 골라 암호를 만든다.
+        [SerializeField] private CipherAnswer[] _answers = Array.Empty<CipherAnswer>();
+        // 켜면 정답 후보 중 하나를 무작위로, 끄면 항상 첫 번째 후보(다리밑)를 쓴다. 산사이용 마무리 문구·TTS가 없어 꺼 둔다.
+        [SerializeField] private bool _isRandomAnswer;
 
         [Header("SuccessScreen")]
         [SerializeField] private GameObject _successScreen;
@@ -107,6 +129,12 @@ namespace Mission
         // TTS가 끝난 뒤 다음 화면으로 넘어가기 전에 기다리는 시간(초).
         [SerializeField, Min(0f)] private float _advanceDelaySeconds = 1f;
 
+        [Header("마무리")]
+        // 마무리 선택·다른 미션 선택 화면.
+        [SerializeField] private MissionEndView _end;
+        // 정답 연출(자모 페이드·효과음)이 끝난 뒤 마무리 선택 화면으로 넘어가기 전에 기다리는 시간(초).
+        [SerializeField, Min(0f)] private float _endDelaySeconds = 1f;
+
         [Header("공통")]
         [SerializeField] private Button _homeButton;
 
@@ -128,6 +156,9 @@ namespace Mission
         private AudioClip _failClip;
         private AudioClip _correctClip;
         private Sequence _introSequence;
+        // 이번에 고른 정답의 장소 버튼과 해독 자모 위치 계산용 버퍼.
+        private Button _answerButton;
+        private readonly List<float> _tokenCenters = new List<float>();
         // SuccessScreen PasswordImage의 씬 위치(월드)와 배경의 씬 알파. 정답 연출의 도착점·끝 값.
         private Vector3 _successPasswordPosition;
         private float _successBackgroundAlpha = 1f;
@@ -234,6 +265,21 @@ namespace Mission
             else if (_logger != null)
             {
                 _logger.ZLogError($"[Mission3SceneController] CipherMapView is not assigned: {nameof(_selectMap)}");
+            }
+
+            if (_end)
+            {
+                _end.Bind();
+                _end.MessageRequested
+                    .Subscribe(this, static (_, self) => self.OnMessageRequested())
+                    .AddTo(ref builder);
+                _end.MissionRequested
+                    .Subscribe(this, static (mission, self) => self.OnMissionRequested(mission))
+                    .AddTo(ref builder);
+            }
+            else if (_logger != null)
+            {
+                _logger.ZLogError($"[Mission3SceneController] MissionEndView is not assigned.");
             }
 
             _subscriptions = builder.Build();
@@ -343,9 +389,49 @@ namespace Mission
             CancelFlow();
             KillIntroSequence();
             if (_mediaPlayer) _mediaPlayer.PlayClip(null);
+            if (_end) _end.Hide();
+
+            if (index == EndPageIndex && _end)
+            {
+                ShowEnd();
+                return;
+            }
 
             _flowCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
             RunFlowAsync(index, _flowCts).Forget();
+        }
+
+        /// <summary>
+        /// 다른 화면을 모두 끄고 마무리 선택 화면을 켠 뒤 버튼을 페이드인함.
+        /// </summary>
+        private void ShowEnd()
+        {
+            CancelFlow();
+            KillIntroSequence();
+            HideAllPages();
+            _currentIndex = EndPageIndex;
+
+            _flowCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
+            RunEndAsync(_flowCts).Forget();
+        }
+
+        /// <summary>
+        /// 마무리 선택 화면 버튼 페이드인. 취소되면 그 상태에 둔다.
+        /// </summary>
+        private async UniTaskVoid RunEndAsync(CancellationTokenSource cts)
+        {
+            try
+            {
+                await _end.ShowEndSelectAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // 화면 전환이나 오브젝트 파괴로 인한 정상 취소.
+            }
+            finally
+            {
+                ReleaseFlowCts(cts);
+            }
         }
 
         /// <summary>
@@ -494,6 +580,7 @@ namespace Mission
         private void ResetSelectState(bool isIntro)
         {
             _isSolved = false;
+            PickAnswer();
 
             if (!isIntro) RestoreTransitionState();
 
@@ -510,6 +597,72 @@ namespace Mission
             {
                 if (isIntro) _passwordText.ResetState();
                 else _passwordText.ShowAll();
+            }
+        }
+
+        /// <summary>
+        /// 정답 후보 하나(_isRandomAnswer면 무작위, 아니면 첫 번째)를 골라 자모를 암호표에서 찾아 숫자를 만들고 SelectScreen·SuccessScreen 암호에 넣음.
+        /// 표에 없는 자모가 있으면 오류를 남기고 다음 후보를 쓴다.
+        /// </summary>
+        private void PickAnswer()
+        {
+            _answerButton = null;
+            if (_answers.Length == 0)
+            {
+                if (_logger != null) _logger.ZLogError($"[Mission3SceneController] No answers are assigned.");
+                return;
+            }
+
+            int start = _isRandomAnswer ? UnityEngine.Random.Range(0, _answers.Length) : 0;
+            for (int n = 0; n < _answers.Length; n++)
+            {
+                CipherAnswer answer = _answers[(start + n) % _answers.Length];
+                if (!CipherCodec.TryEncode(answer.jamo, out string code))
+                {
+                    if (_logger != null) _logger.ZLogError($"[Mission3SceneController] Answer jamo is not in the cipher table: {answer.jamo}");
+                    continue;
+                }
+
+                _answerButton = answer.button;
+                if (_passwordText) _passwordText.SetPassword(code);
+                if (_successPasswordText) _successPasswordText.SetPassword(code);
+                if (_logger != null) _logger.ZLogInformation($"[Mission3SceneController] Answer: {answer.jamo} ({code}), button {(answer.button ? answer.button.name : "null")}");
+                return;
+            }
+        }
+
+        /// <summary>
+        /// 해독 자모를 SuccessScreen 암호 숫자 아래에 맞춰 씀. 토큰(13, 30, …, 0022)마다 그 숫자들의 가운데에 자모 하나를 가운데 맞춤으로 둔다.
+        /// 공백이 다 벌어진 뒤에 불러야 위치가 맞는다.
+        /// </summary>
+        private void BuildHint()
+        {
+            if (!_successHint || !_successPasswordText) return;
+
+            TMP_Text hint = _successHint.GetComponent<TMP_Text>();
+            RectTransform hintRect = hint.rectTransform;
+            IReadOnlyList<CipherToken> tokens = _successPasswordText.Tokens;
+            _successPasswordText.GetTokenCenters(_tokenCenters);
+
+            Utf16ValueStringBuilder builder = ZString.CreateStringBuilder();
+            try
+            {
+                for (int i = 0; i < _tokenCenters.Count; i++)
+                {
+                    // pos 태그는 텍스트 영역 왼쪽 기준이다(왼쪽 정렬, 여백 포함).
+                    float localCenter = hintRect.InverseTransformPoint(new Vector3(_tokenCenters[i], 0f, 0f)).x - hintRect.rect.xMin - hint.margin.x;
+                    float jamoWidth = hint.GetPreferredValues(tokens[i].Jamo.ToString()).x;
+                    builder.Append("<pos=");
+                    builder.Append(Mathf.RoundToInt(localCenter - jamoWidth * 0.5f));
+                    builder.Append("px>");
+                    builder.Append(tokens[i].Jamo);
+                }
+
+                _successHint.SetText(builder.ToString());
+            }
+            finally
+            {
+                builder.Dispose();
             }
         }
 
@@ -581,6 +734,7 @@ namespace Mission
             if (_selectScreen) _selectScreen.SetActive(false);
             if (_failScreen) _failScreen.SetActive(false);
             if (_successScreen) _successScreen.SetActive(false);
+            if (_end) _end.Hide();
         }
 
         /// <summary>
@@ -714,7 +868,7 @@ namespace Mission
 
         /// <summary>
         /// 정답: 효과음과 함께 SuccessScreen을 겹쳐 켜고 PasswordImage를 SelectScreen 암호 자리에서 제자리로 옮긴 뒤(배경 페이드인 동시),
-        /// SelectScreen을 끄고 암호 사이 공백 벌리기 → 해독 자모 페이드인. 효과음까지 끝나면 마친다(그 뒤 화면은 아직 없다).
+        /// SelectScreen을 끄고 암호 사이 공백 벌리기 → 해독 자모 페이드인. 효과음까지 끝나면 _endDelaySeconds 뒤 마무리 선택 화면으로 간다.
         /// </summary>
         private async UniTaskVoid RunCorrectAsync(CancellationTokenSource cts)
         {
@@ -740,11 +894,19 @@ namespace Mission
                     ShowRoot(_successScreen);
 
                     if (_successPasswordText) await _successPasswordText.PlaySplitAsync(token);
+                    BuildHint();
                     if (_successHint) await _successHint.PlayAsync(token);
                 }
 
                 await sfx;
-                if (_logger != null) _logger.ZLogInformation($"[Mission3SceneController] Password solved. Next screen is not implemented yet.");
+                if (_endDelaySeconds > 0f)
+                {
+                    await UniTask.Delay(TimeSpan.FromSeconds(_endDelaySeconds), DelayType.UnscaledDeltaTime, PlayerLoopTiming.Update, token);
+                }
+
+                // ShowEnd가 이 흐름의 CTS를 끊고 새 흐름을 시작한다. 이 뒤에는 기다리는 일이 없다.
+                if (_end) ShowEnd();
+                else if (_logger != null) _logger.ZLogWarning($"[Mission3SceneController] Password solved but MissionEndView is not assigned.");
             }
             catch (OperationCanceledException)
             {
@@ -782,6 +944,49 @@ namespace Mission
             if (_logger != null) _logger.ZLogInformation($"[Mission3SceneController] Home button clicked. Returning to idle guide screen.");
             if (_session != null) _session.RequestGuideReturn();
             LeaveScene(Constants.Scenes.Idle);
+        }
+
+        /// <summary>
+        /// 마무리 선택 화면의 "메시지 보내기"로 9_Message로 감. 씬이 빌드에 없으면 경고를 남기고 0_Idle로 간다.
+        /// </summary>
+        private void OnMessageRequested()
+        {
+            if (_isLeaving || _currentIndex != EndPageIndex) return;
+
+            if (Application.CanStreamedLevelBeLoaded(Constants.Scenes.Message))
+            {
+                LeaveScene(Constants.Scenes.Message);
+                return;
+            }
+
+            if (_logger != null) _logger.ZLogWarning($"[Mission3SceneController] Scene {Constants.Scenes.Message} is not in build settings. Going to idle instead.");
+            LeaveScene(Constants.Scenes.Idle);
+        }
+
+        /// <summary>
+        /// 다른 미션 버튼으로 그 미션을 세션에 기록하고 미션 씬으로 이동함.
+        /// </summary>
+        private void OnMissionRequested(ContentType mission)
+        {
+            if (_isLeaving || _currentIndex != EndPageIndex) return;
+
+            string sceneName = mission switch
+            {
+                ContentType.Culture => Constants.Scenes.Mission1,
+                ContentType.Truth => Constants.Scenes.Mission2,
+                ContentType.Nation => Constants.Scenes.Mission3,
+                _ => null
+            };
+
+            if (string.IsNullOrEmpty(sceneName))
+            {
+                if (_logger != null) _logger.ZLogError($"[Mission3SceneController] No scene for mission {mission}. Check MissionEndView targets.");
+                return;
+            }
+
+            if (_session != null) _session.SetContent(mission);
+            if (_logger != null) _logger.ZLogInformation($"[Mission3SceneController] Other mission selected: {mission}. Loading scene {sceneName}.");
+            LeaveScene(sceneName);
         }
 
         /// <summary>

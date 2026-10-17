@@ -85,6 +85,8 @@ namespace Mission
 
         [Header("역사 화면")]
         [SerializeField] private Button _historyNextButton;
+        // 역사 화면에 들어간 뒤(TTS가 있으면 TTS가 끝난 뒤) 확인 버튼 페이드인을 시작하기까지 기다리는 시간(초).
+        [SerializeField, Min(0f)] private float _historyButtonDelaySeconds = 2f;
 
         [Header("마무리 선택")]
         [SerializeField] private Button _messageButton;
@@ -775,6 +777,11 @@ namespace Mission
                 {
                     await stage.FadeInChoicesAsync(_buttonFadeSeconds, cts.Token);
                     return;
+                }
+
+                if (index == HistoryPageIndex && _historyButtonDelaySeconds > 0f)
+                {
+                    await UniTask.Delay(TimeSpan.FromSeconds(_historyButtonDelaySeconds), DelayType.UnscaledDeltaTime, PlayerLoopTiming.Update, cts.Token);
                 }
 
                 await FadeInButtonsAsync(index, cts.Token);

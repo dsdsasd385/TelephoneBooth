@@ -30,6 +30,7 @@ namespace Mission
     /// 선택 완료를 누르면 Submitted로 정답 여부를 알린다. 오답 문구·TTS 대기는 씬 매니저가 ShowFailTitle/ShowDefaultTitle로 처리한다.
     /// 정답 연출(PlayCorrectAsync): ReportImage를 고른 사진의 XXX_Result로 교체(빈 칸·선택 완료는 숨김)하고 TitleImage·Btns 페이드아웃 →
     /// _moveDelaySeconds 뒤 XXX_Stemp로 교체하며 ReportImage 이동·크기 변경 → StempImage 도장 찍기.
+    /// Result 교체는 바로 하고, Stemp 교체는 이동·크기 변경 동안 크로스페이드 이미지(_crossfadeImage)로 겹쳐 페이드한다.
     /// </para>
     /// <para>
     /// StempImage는 ReportImage의 자식이며 이동·크기 변경이 끝난 뒤에 켜므로, 위치는 커진 결과 이미지의 왼쪽 위 기준 값이다.
@@ -66,6 +67,11 @@ namespace Mission
         [SerializeField, Min(0f)] private float _resultMoveSeconds = 1f;
         [SerializeField] private Ease _resultMoveEase = Ease.OutQuad;
 
+        [Header("도장용 이미지 크로스페이드")]
+        // ReportImage 자식으로 같은 크기(꽉 채움)로 겹친 이미지. 이동·크기 변경 동안 XXX_Stemp를 여기서 페이드인한 뒤 ReportImage에 넘긴다.
+        // 비어 있으면 페이드 없이 바로 바꾼다.
+        [SerializeField] private Image _crossfadeImage;
+
         [Header("도장")]
         [SerializeField] private RectTransform _stampImage;
         [SerializeField] private CanvasGroup _stampGroup;
@@ -92,6 +98,8 @@ namespace Mission
         private Sequence _sequence;
         private AudioClip _stampClip;
         private TweenCallback _onSwapToStemp;
+        private TweenCallback _onBeginStempFade;
+        private TweenCallback _onCommitCrossfade;
         private int _reportIndex = -1;
         private int _selectedIndex = -1;
         private bool _isLocked;
@@ -196,6 +204,7 @@ namespace Mission
             }
 
             SetGroup(_reportGroup, 1f, true);
+            SetCrossfadeAlpha(0f);
 
             if (_slotImage)
             {
@@ -262,18 +271,32 @@ namespace Mission
             KillSequence();
             Lock();
 
-            // 1) 보고서 → 결과 이미지 교체
-            SwapToResult();
-
             // Join·Append는 Sequence를 돌려주는데 DOTween Sequence가 awaitable이라 결과를 버리면 CS4014 경고가 나서 다시 받는다.
             Sequence sequence = DOTween.Sequence().SetUpdate(true);
+
+            // 1) 보고서 → 결과 이미지 바로 교체
+            Sprite stemp = _selectedIndex >= 0 ? _answers[_selectedIndex].stemp : null;
+            HideSlotAndSubmit();
+            SwapToResult();
 
             // 2) 문구·사진 버튼 페이드아웃(이동 전 대기 시간 동안)
             if (_titleGroup) sequence = sequence.Join(_titleGroup.DOFade(0f, _hideSeconds));
             if (_choicesGroup) sequence = sequence.Join(_choicesGroup.DOFade(0f, _hideSeconds));
 
-            // 3) 대기 뒤 도장용 결과 이미지로 바꾸며 이동·크기 변경
-            sequence = sequence.InsertCallback(_moveDelaySeconds, _onSwapToStemp);
+            // 3) 대기 뒤 도장용 결과 이미지로 바꾸며 이동·크기 변경. 크로스페이드 이미지가 있으면 이동하는 동안 겹쳐 페이드한다.
+            // (두 이미지의 가로세로 비율이 달라 바로 바꾸면 내용이 튀어 보인다)
+            if (_crossfadeImage && _reportImage && stemp && _resultMoveSeconds > 0f)
+            {
+                sequence = sequence
+                    .InsertCallback(_moveDelaySeconds, _onBeginStempFade)
+                    .Insert(_moveDelaySeconds, _crossfadeImage.DOFade(1f, _resultMoveSeconds))
+                    .InsertCallback(_moveDelaySeconds + _resultMoveSeconds, _onCommitCrossfade);
+            }
+            else
+            {
+                sequence = sequence.InsertCallback(_moveDelaySeconds, _onSwapToStemp);
+            }
+
             if (_reportRect)
             {
                 sequence = sequence
@@ -342,9 +365,53 @@ namespace Mission
             {
                 _reportImage.sprite = _answers[_selectedIndex].result;
             }
+        }
 
+        /// <summary>
+        /// 빈 칸과 선택 완료 버튼을 숨김(완성 보고서에는 사진이 이미 들어 있다).
+        /// </summary>
+        private void HideSlotAndSubmit()
+        {
             if (_slotImage) _slotImage.gameObject.SetActive(false);
             if (_submitButton) _submitButton.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// 크로스페이드 이미지에 다음 Sprite를 투명하게 올림. 이어서 알파를 1로 페이드한 뒤 CommitCrossfade로 넘긴다.
+        /// </summary>
+        private void BeginCrossfade(Sprite sprite)
+        {
+            _crossfadeImage.sprite = sprite;
+            SetCrossfadeAlpha(0f);
+        }
+
+        /// <summary>
+        /// 도장용 결과 이미지(XXX_Stemp) 크로스페이드를 시작함. 정답 연출 Sequence의 콜백.
+        /// </summary>
+        private void BeginStempFade()
+        {
+            if (_selectedIndex >= 0) BeginCrossfade(_answers[_selectedIndex].stemp);
+        }
+
+        /// <summary>
+        /// 다 나타난 크로스페이드 이미지의 Sprite를 ReportImage로 넘기고 크로스페이드 이미지를 다시 투명하게 함.
+        /// </summary>
+        private void CommitCrossfade()
+        {
+            if (_reportImage && _crossfadeImage.sprite) _reportImage.sprite = _crossfadeImage.sprite;
+            SetCrossfadeAlpha(0f);
+        }
+
+        /// <summary>
+        /// 크로스페이드 이미지 알파만 바꿈.
+        /// </summary>
+        private void SetCrossfadeAlpha(float alpha)
+        {
+            if (!_crossfadeImage) return;
+
+            Color color = _crossfadeImage.color;
+            color.a = alpha;
+            _crossfadeImage.color = color;
         }
 
         /// <summary>
@@ -423,6 +490,8 @@ namespace Mission
             if (_isCached) return;
 
             _onSwapToStemp = SwapToStemp;
+            _onBeginStempFade = BeginStempFade;
+            _onCommitCrossfade = CommitCrossfade;
             if (_titleImage) _defaultTitleSprite = _titleImage.sprite;
             if (_slotImage)
             {

@@ -14,5 +14,17 @@ namespace Data
         public int receiverRequestIntervalMs = 100;
         // 이 시간(ms) 동안 응답이 없으면 연결 이상 로그를 남긴다. 수화기 상태는 마지막 값을 유지한다.
         public int receiverResponseTimeoutMs = 1000;
+
+        // 이 PC의 번호(1–3). 메시지 전송 본문의 deviceNumber로 보낸다.
+        public int deviceNumber = 1;
+        // 메시지를 받는 프로그램의 주소(작업계획서 10장).
+        public string messageServerHost = "127.0.0.1";
+        public int messageServerPort = 7000;
+        // 한 번 보낼 때 연결부터 ACK까지의 제한 시간(ms).
+        public int messageSendTimeoutMs = 1500;
+        // 처음 보낼 때 시도 횟수. 모두 실패하면 로컬에 저장하고 나중에 다시 보낸다.
+        public int messageSendAttempts = 3;
+        // 저장해 둔 메시지를 다시 보내는 주기(초).
+        public int messageResendIntervalSeconds = 60;
     }
 }

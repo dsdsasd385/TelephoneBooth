@@ -1,7 +1,7 @@
 {
   "screens": [
-    { "screen": "1", "tts": ["Audio/Mission2/미션2_01-1.wav", "Audio/Mission2/미션2_01-2.wav", "Audio/Mission2/미션2_01-3.wav"] },
-    { "screen": "2", "tts": ["Audio/Mission2/미션2_01-4-1.wav", "Audio/Mission2/미션2_01-4-2.wav"] }
+    { "screen": "Guide1", "tts": ["Audio/Mission2/미션2_01-1.wav", "Audio/Mission2/미션2_01-2.wav", "Audio/Mission2/미션2_01-3.wav"] },
+    { "screen": "Guide2", "tts": ["Audio/Mission2/미션2_01-4-1.wav", "Audio/Mission2/미션2_01-4-2.wav"] }
   ],
   "quizIntroTts": "Audio/Mission2/미션2_02-1.wav",
   "quizFailTts": "Audio/Mission2/미션2_02-2_수정.wav",

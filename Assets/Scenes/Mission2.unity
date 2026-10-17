@@ -1258,7 +1258,7 @@ GameObject:
   - component: {fileID: 616436703}
   - component: {fileID: 616436704}
   m_Layer: 0
-  m_Name: 1
+  m_Name: Guide1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1453,7 +1453,7 @@ GameObject:
   - component: {fileID: 635231036}
   - component: {fileID: 635231037}
   m_Layer: 0
-  m_Name: 2
+  m_Name: Guide2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1701,8 +1701,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 338, y: -350}
-  m_SizeDelta: {x: 572, y: 381}
+  m_AnchoredPosition: {x: 304, y: -290}
+  m_SizeDelta: {x: 500, y: 500}
   m_Pivot: {x: 0, y: 1}
 --- !u!225 &757821726
 CanvasGroup:
@@ -1780,7 +1780,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: c3008dc5b17910442bd9e290acd73f60, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 7cadefbaa23321140b0712d3bc04288d, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1945,6 +1945,7 @@ GameObject:
   m_Component:
   - component: {fileID: 827582350}
   - component: {fileID: 827582349}
+  - component: {fileID: 827582351}
   m_Layer: 0
   m_Name: Mission2SceneController
   m_TagString: Untagged
@@ -1971,6 +1972,8 @@ MonoBehaviour:
   _noTtsLineSeconds: 5
   _lineAdvanceDelaySeconds: 1
   _quiz: {fileID: 1064641560}
+  _end: {fileID: 827582351}
+  _endDelaySeconds: 1
   _homeButton: {fileID: 623796342}
 --- !u!4 &827582350
 Transform:
@@ -1987,6 +1990,28 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &827582351
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 827582348}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 45224b46d7943c64aa1a844954400e09, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _endSelectScreen: {fileID: 461017277}
+  _messageButton: {fileID: 194957902}
+  _otherMissionButton: {fileID: 1938230680}
+  _otherMissionScreen: {fileID: 1414410240}
+  _missionTargets:
+  - button: {fileID: 757821727}
+    mission: 1
+  - button: {fileID: 1356518908}
+    mission: 3
+  _buttonFadeSeconds: 0.5
 --- !u!1 &1064641557
 GameObject:
   m_ObjectHideFlags: 0
@@ -2084,6 +2109,8 @@ MonoBehaviour:
   _hideSeconds: 0.5
   _resultMoveSeconds: 1
   _resultMoveEase: 6
+  _crossfadeImage: {fileID: 1374036831}
+  _resultFadeSeconds: 0.3
   _stampImage: {fileID: 1558440322}
   _stampGroup: {fileID: 1558440325}
   _stampStartScale: 2.5
@@ -2609,8 +2636,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 1010, y: -350}
-  m_SizeDelta: {x: 572, y: 381}
+  m_AnchoredPosition: {x: 1148, y: -290}
+  m_SizeDelta: {x: 500, y: 500}
   m_Pivot: {x: 0, y: 1}
 --- !u!225 &1356518907
 CanvasGroup:
@@ -2688,7 +2715,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 4dca2cc0927ef284e8f86d194c8a5c66, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 4c522421a82246f44a1610130bcdb61d, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -2705,6 +2732,81 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1356518905}
+  m_CullTransparentMesh: 1
+--- !u!1 &1374036829
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1374036830}
+  - component: {fileID: 1374036832}
+  - component: {fileID: 1374036831}
+  m_Layer: 0
+  m_Name: CrossfadeImage
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1374036830
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1374036829}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1811454179}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1374036831
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1374036829}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1374036832
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1374036829}
   m_CullTransparentMesh: 1
 --- !u!1 &1381028775
 GameObject:
@@ -2784,7 +2886,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1414410241
 RectTransform:
   m_ObjectHideFlags: 0
@@ -3723,6 +3825,7 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 1374036830}
   - {fileID: 1154821249}
   - {fileID: 466965394}
   - {fileID: 1558440322}

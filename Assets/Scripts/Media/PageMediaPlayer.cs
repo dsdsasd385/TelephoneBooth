@@ -603,7 +603,12 @@ namespace Media
             _videoLoopCompleted.OnNext(Unit.Default);
 
             // 한 번만 재생하는 페이지는 되돌리지 않는다. isLooping이 꺼져 있어 플레이어는 마지막 프레임을 보인 채 멈춘다.
-            if (!_isLooping) return;
+            // TTS가 영상보다 길어도 더는 맞추지 않는다. 맞추면 멈춘 영상을 TTS 위치로 계속 탐색해 끊겨 보인다.
+            if (!_isLooping)
+            {
+                ReleaseVideoFromTts();
+                return;
+            }
 
             if (_isDoubleBuffering && _back.IsPrimed && _back.Player && _back.Player.url == source.url && _currentSurface)
             {
@@ -792,6 +797,13 @@ namespace Media
             if (_isSeeking) return;
 
             double target = GetVideoTimeForTts();
+
+            // 한 번만 재생하는 영상은 TTS가 영상 끝을 넘으면 맞추기를 끝낸다(끝 프레임에 멈춘 채 둔다).
+            if (!_isLooping && FrontPlayer.length > 0d && target >= FrontPlayer.length)
+            {
+                ReleaseVideoFromTts();
+                return;
+            }
             // time은 보이는 프레임의 시작 시각이라 평균 반 프레임 늦게 보인다. 프레임 가운데로 보정해 비교한다.
             double drift = WrapDrift(FrontPlayer.time + FrameDuration() * 0.5d - target);
             _smoothedDrift += (drift - _smoothedDrift) * 0.2d;
@@ -832,7 +844,8 @@ namespace Media
         }
 
         /// <summary>
-        /// 현재 TTS 재생 위치에 해당하는 영상 시간을 계산함. 영상이 TTS보다 짧으면 반복 위치로 접는다.
+        /// 현재 TTS 재생 위치에 해당하는 영상 시간을 계산함. 반복 영상이 TTS보다 짧으면 반복 위치로 접고,
+        /// 한 번만 재생하는 영상은 접지 않는다(영상 길이를 넘은 값이 그대로 나온다).
         /// </summary>
         private double GetVideoTimeForTts()
         {
@@ -843,7 +856,7 @@ namespace Media
             if (videoTime < 0d) videoTime = 0d;
 
             double length = FrontPlayer.length;
-            return length > 0d ? videoTime % length : videoTime;
+            return _isLooping && length > 0d ? videoTime % length : videoTime;
         }
 
         /// <summary>
@@ -853,7 +866,7 @@ namespace Media
         private double WrapDrift(double drift)
         {
             double length = FrontPlayer.length;
-            if (length <= 0d) return drift;
+            if (!_isLooping || length <= 0d) return drift;
 
             double half = length * 0.5d;
             while (drift > half) drift -= length;

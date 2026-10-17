@@ -1,11 +1,13 @@
 using System;
 using System.Threading;
 using App;
+using Core;
 using Cysharp.Threading.Tasks;
 using Data;
 using Hardware;
 using Media;
 using Microsoft.Extensions.Logging;
+using Network;
 using R3;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -23,12 +25,12 @@ namespace Message
     /// CheckScreen의 Next 버튼은 수화기가 걸려 있을 때만 누를 수 있다(들려 있으면 interactable을 끈다).
     /// </para>
     /// <para>
-    /// 설정에서 최대 글자 수를 읽어 입력 뷰를 묶는다. 보내기(다짐 칸 Enter)를 받으면 길이만 로그로 남기고
-    /// (운영 로그에 본문은 남기지 않는다) MessageVideo에 로딩 영상을 한 번 재생한 뒤 0_Idle로 간다.
+    /// 설정에서 최대 글자 수를 읽어 입력 뷰를 묶는다. 보내기(다짐 칸 Enter)를 받으면 MessageSender로 TCP 전송을 시작하고
+    /// (결과는 기다리지 않음, 로그에 본문은 남기지 않는다) MessageVideo에 로딩 영상을 한 번 재생한 뒤 0_Idle로 간다.
     /// 영상이 덮고 있는 동안은 다시 보낼 수 없다.
     /// </para>
     /// <para>
-    /// 아직 없는 것: TCP 전송(로딩 영상 동안 보낼 예정), 완료 문구, 건너뛰기, 무입력 타임아웃.
+    /// 아직 없는 것: 완료 문구, 건너뛰기, 무입력 타임아웃.
     /// </para>
     /// </summary>
     public class MessageSceneController : MonoBehaviour
@@ -49,10 +51,13 @@ namespace Message
 
         private ILogger<MessageSceneController> _logger;
         private IReceiverInput _receiverInput;
+        private MessageSender _messageSender;
+        private ExperienceSession _session;
         private IDisposable _subscriptions;
         private IDisposable _checkSubscriptions;
         private MessageSettings _settings = new MessageSettings();
         private bool _isSubmitted;
+        private bool _isReturning;
 
         #endregion
 
@@ -62,10 +67,12 @@ namespace Message
         /// MessageLifetimeScope가 메서드 주입으로 의존성을 넣음.
         /// </summary>
         [Inject]
-        public void Construct(ILogger<MessageSceneController> logger, IReceiverInput receiverInput)
+        public void Construct(ILogger<MessageSceneController> logger, IReceiverInput receiverInput, MessageSender messageSender, ExperienceSession session)
         {
             _logger = logger;
             _receiverInput = receiverInput;
+            _messageSender = messageSender;
+            _session = session;
         }
 
         private void Start()
@@ -225,7 +232,17 @@ namespace Message
             if (_isSubmitted) return;
             _isSubmitted = true;
 
-            if (_logger != null) _logger.ZLogInformation($"[MessageSceneController] Message submitted (name {submission.Name.Length} chars, message {submission.Message.Length} chars). Sending is not implemented yet.");
+            if (_logger != null) _logger.ZLogInformation($"[MessageSceneController] Message submitted (name {submission.Name.Length} chars, message {submission.Message.Length} chars).");
+
+            // 전송은 루트 서비스가 로딩 영상과 상관없이 이어 간다(실패하면 저장 후 재전송). 화면 흐름은 결과를 기다리지 않는다.
+            if (_messageSender != null)
+            {
+                _messageSender.Send(submission.Name, submission.Message, _session != null ? _session.Content : ContentType.None);
+            }
+            else if (_logger != null)
+            {
+                _logger.ZLogError($"[MessageSceneController] MessageSender is not injected. Message was not sent.");
+            }
 
             if (_loadingVideo)
             {
@@ -238,11 +255,36 @@ namespace Message
         }
 
         /// <summary>
-        /// 로딩 영상이 끝나면 0_Idle로 감. 완료 문구 화면이 생기면 그 화면을 거친다.
+        /// 로딩 영상이 끝나면 설정의 idleReturnDelaySeconds만큼 마지막 프레임을 보여 준 뒤 0_Idle로 감. 완료 문구 화면이 생기면 그 화면을 거친다.
         /// </summary>
         private void OnLoadingVideoCompleted()
         {
-            if (_logger != null) _logger.ZLogInformation($"[MessageSceneController] Loading video finished. Moving to {Constants.Scenes.Idle}.");
+            if (_isReturning) return;
+            _isReturning = true;
+
+            ReturnToIdleAsync(this.GetCancellationTokenOnDestroy()).Forget();
+        }
+
+        /// <summary>
+        /// 대기 시간 뒤 0_Idle을 불러옴.
+        /// </summary>
+        private async UniTaskVoid ReturnToIdleAsync(CancellationToken cancellationToken)
+        {
+            float delay = Mathf.Max(0f, _settings.idleReturnDelaySeconds);
+            if (_logger != null) _logger.ZLogInformation($"[MessageSceneController] Loading video finished. Moving to {Constants.Scenes.Idle} in {delay:F1}s.");
+
+            try
+            {
+                if (delay > 0f)
+                {
+                    await UniTask.Delay(TimeSpan.FromSeconds(delay), DelayType.UnscaledDeltaTime, PlayerLoopTiming.Update, cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
             SceneManager.LoadScene(Constants.Scenes.Idle);
         }
 

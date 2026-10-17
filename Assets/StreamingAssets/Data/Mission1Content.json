@@ -5,8 +5,8 @@
     { "screen": "SelectScreen2",      "video": "", "tts": "Audio/Mission1/미션1_03_1.wav" },
     { "screen": "SelectScreen3",      "video": "", "tts": "Audio/Mission1/미션1_04_1_수정.mp3" },
     { "screen": "VideoScreen",        "video": "Video/Mission1/Mission1_VideoScreen.mp4", "tts": "Audio/Mission1/미션1_05_발자국소리.wav" },
-    { "screen": "HistoryScreen",      "video": "", "tts": "Audio/Mission1/미션1_06.wav" },
-    { "screen": "EndSelectScreen",    "video": "", "tts": "" },
+    { "screen": "HistoryScreen",      "video": "", "tts": "" },
+    { "screen": "EndSelectScreen",    "video": "", "tts": "Audio/Mission1/미션1_06.wav" },
     { "screen": "OtherMissionScreen", "video": "", "tts": "" }
   ],
   "stages": [

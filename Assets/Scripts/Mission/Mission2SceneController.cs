@@ -22,7 +22,7 @@ using ZLogger;
 namespace Mission
 {
     /// <summary>
-    /// 미션2(진실수호) 씬의 흐름을 관리하는 씬 매니저. 지금은 대사 화면 1·2와 보고서 화면 3이 있다.
+    /// 미션2(진실수호) 씬의 흐름을 관리하는 씬 매니저. 대사 화면 Guide1·Guide2 → 보고서 화면 → 마무리 선택 화면 순서다.
     /// <para>
     /// 대사 화면: 대사 Sprite(진실-N 1, 2, …)를 차례로 보여 주며 대사마다 TTS를 한 번 재생하고, TTS가 끝나면 다음 대사로 바꾼다.
     /// 화면의 마지막 대사 TTS가 끝나면 다음 화면으로 넘어간다. 연출 대사(DialogueScreenView의 revealLineIndex)에 들어가면
@@ -30,7 +30,8 @@ namespace Mission
     /// </para>
     /// <para>
     /// 보고서 화면: 들어갈 때 안내 TTS를 재생한다. 오답이면 TitleImage를 오답 문구로 바꾸고 오답 TTS가 끝나면 기본 문구로 되돌린다.
-    /// 정답이면 ReportQuizView의 정답 연출(완성 보고서·도장, 도장 효과음)을 재생한다. 그 뒤 화면은 아직 없다.
+    /// 정답이면 ReportQuizView의 정답 연출(완성 보고서·도장, 도장 효과음)을 재생하고, 도장이 끝나고 _endDelaySeconds(1초) 뒤
+    /// 마무리 선택 화면(MissionEndView: 메시지 보내기 → 9_Message, 다른 미션 → 미션1·3)으로 넘어간다.
     /// </para>
     /// <para>
     /// TTS 파일이 아직 없어 경로가 빈 대사·오답 TTS는 _noTtsLineSeconds 동안 보여 준다.
@@ -54,6 +55,12 @@ namespace Mission
         [Header("보고서 화면")]
         // 대사 화면 다음 화면. 뷰의 오브젝트가 화면 루트다.
         [SerializeField] private ReportQuizView _quiz;
+
+        [Header("마무리")]
+        // 마무리 선택·다른 미션 선택 화면.
+        [SerializeField] private MissionEndView _end;
+        // 정답 연출(도장)이 끝난 뒤 마무리 선택 화면으로 넘어가기 전에 기다리는 시간(초).
+        [SerializeField, Min(0f)] private float _endDelaySeconds = 1f;
 
         [Header("공통")]
         [SerializeField] private Button _homeButton;
@@ -89,14 +96,19 @@ namespace Mission
         #region Properties
 
         /// <summary>
-        /// 대사 화면 수 + 보고서 화면.
+        /// 대사 화면 수 + 보고서 화면 + 마무리 선택 화면.
         /// </summary>
-        private int PageCount => _screens.Length + (_quiz ? 1 : 0);
+        private int PageCount => _screens.Length + (_quiz ? 1 : 0) + (_end ? 1 : 0);
 
         /// <summary>
         /// 보고서 화면의 페이지 번호. 대사 화면 다음이다.
         /// </summary>
         private int QuizPageIndex => _screens.Length;
+
+        /// <summary>
+        /// 마무리 선택 화면의 페이지 번호. 보고서 화면 다음이다.
+        /// </summary>
+        private int EndPageIndex => _screens.Length + (_quiz ? 1 : 0);
 
         #endregion
 
@@ -191,6 +203,21 @@ namespace Mission
             else if (_logger != null)
             {
                 _logger.ZLogError($"[Mission2SceneController] ReportQuizView is not assigned.");
+            }
+
+            if (_end)
+            {
+                _end.Bind();
+                _end.MessageRequested
+                    .Subscribe(this, static (_, self) => self.OnMessageRequested())
+                    .AddTo(ref builder);
+                _end.MissionRequested
+                    .Subscribe(this, static (mission, self) => self.OnMissionRequested(mission))
+                    .AddTo(ref builder);
+            }
+            else if (_logger != null)
+            {
+                _logger.ZLogError($"[Mission2SceneController] MissionEndView is not assigned.");
             }
 
             _subscriptions = builder.Build();
@@ -355,6 +382,13 @@ namespace Mission
             CancelFlow();
             CancelFeedback();
             if (_mediaPlayer) _mediaPlayer.PlayClip(null);
+            if (_end) _end.Hide();
+
+            if (index == EndPageIndex && _end)
+            {
+                ShowEnd();
+                return;
+            }
 
             if (index == QuizPageIndex)
             {
@@ -479,7 +513,45 @@ namespace Mission
             }
 
             if (_quiz) _quiz.gameObject.SetActive(false);
+            if (_end) _end.Hide();
             _visibleRoot = null;
+        }
+
+        /// <summary>
+        /// 보이던 화면을 끄고 마무리 선택 화면을 켠 뒤 버튼을 페이드인함.
+        /// </summary>
+        private void ShowEnd()
+        {
+            if (_visibleRoot) _visibleRoot.SetActive(false);
+            _visibleRoot = null;
+            _currentIndex = EndPageIndex;
+
+            CancelFlow();
+            _flowCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
+            RunEndAsync(_flowCts).Forget();
+        }
+
+        /// <summary>
+        /// 마무리 선택 화면 버튼 페이드인. 취소되면 그 상태에 둔다.
+        /// </summary>
+        private async UniTaskVoid RunEndAsync(CancellationTokenSource cts)
+        {
+            try
+            {
+                await _end.ShowEndSelectAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // 화면 전환이나 오브젝트 파괴로 인한 정상 취소.
+            }
+            finally
+            {
+                if (_flowCts == cts)
+                {
+                    _flowCts.Dispose();
+                    _flowCts = null;
+                }
+            }
         }
 
         /// <summary>
@@ -574,7 +646,19 @@ namespace Mission
             try
             {
                 await _quiz.PlayCorrectAsync(cts.Token);
-                if (_logger != null) _logger.ZLogInformation($"[Mission2SceneController] Report completed. Next screen is not implemented yet.");
+                if (_endDelaySeconds > 0f)
+                {
+                    await UniTask.Delay(TimeSpan.FromSeconds(_endDelaySeconds), DelayType.UnscaledDeltaTime, PlayerLoopTiming.Update, cts.Token);
+                }
+
+                if (_end)
+                {
+                    ShowEnd();
+                }
+                else if (_logger != null)
+                {
+                    _logger.ZLogWarning($"[Mission2SceneController] Report completed but MissionEndView is not assigned.");
+                }
             }
             catch (OperationCanceledException)
             {
@@ -637,6 +721,49 @@ namespace Mission
             if (_logger != null) _logger.ZLogInformation($"[Mission2SceneController] Home button clicked. Returning to idle guide screen.");
             if (_session != null) _session.RequestGuideReturn();
             LeaveScene(Constants.Scenes.Idle);
+        }
+
+        /// <summary>
+        /// 마무리 선택 화면의 "메시지 보내기"로 9_Message로 감. 씬이 빌드에 없으면 경고를 남기고 0_Idle로 간다.
+        /// </summary>
+        private void OnMessageRequested()
+        {
+            if (_isLeaving || _currentIndex != EndPageIndex) return;
+
+            if (Application.CanStreamedLevelBeLoaded(Constants.Scenes.Message))
+            {
+                LeaveScene(Constants.Scenes.Message);
+                return;
+            }
+
+            if (_logger != null) _logger.ZLogWarning($"[Mission2SceneController] Scene {Constants.Scenes.Message} is not in build settings. Going to idle instead.");
+            LeaveScene(Constants.Scenes.Idle);
+        }
+
+        /// <summary>
+        /// 다른 미션 버튼으로 그 미션을 세션에 기록하고 미션 씬으로 이동함.
+        /// </summary>
+        private void OnMissionRequested(ContentType mission)
+        {
+            if (_isLeaving || _currentIndex != EndPageIndex) return;
+
+            string sceneName = mission switch
+            {
+                ContentType.Culture => Constants.Scenes.Mission1,
+                ContentType.Truth => Constants.Scenes.Mission2,
+                ContentType.Nation => Constants.Scenes.Mission3,
+                _ => null
+            };
+
+            if (string.IsNullOrEmpty(sceneName))
+            {
+                if (_logger != null) _logger.ZLogError($"[Mission2SceneController] No scene for mission {mission}. Check MissionEndView targets.");
+                return;
+            }
+
+            if (_session != null) _session.SetContent(mission);
+            if (_logger != null) _logger.ZLogInformation($"[Mission2SceneController] Other mission selected: {mission}. Loading scene {sceneName}.");
+            LeaveScene(sceneName);
         }
 
         /// <summary>
