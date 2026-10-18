@@ -1,8 +1,9 @@
 {
   "useArduino": true,
   "receiverRequestIntervalMs": 100,
-  "logReceiverResponses": true,
+  "logReceiverResponses": false,
   "receiverResponseTimeoutMs": 1000,
+  "receiverHandshakeTimeoutMs": 2500,
   "messageServerHost": "192.168.200.171",
   "messageServerPort": 5000,
   "messageSendTimeoutMs": 1500,

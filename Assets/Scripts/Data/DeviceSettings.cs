@@ -16,6 +16,8 @@ namespace Data
         public bool logReceiverResponses;
         // 이 시간(ms) 동안 응답이 없으면 연결 이상 로그를 남긴다. 수화기 상태는 마지막 값을 유지한다.
         public int receiverResponseTimeoutMs = 1000;
+        // 포트를 연 뒤 핸드셰이크를 기다리는 시간(ms). Uno·Nano는 포트를 열면 재부팅되고 부트로더가 1~2초 걸리므로 그보다 길게 둔다.
+        public int receiverHandshakeTimeoutMs = 2500;
 
         // 메시지를 받는 프로그램의 주소(작업계획서 10장). 부스 번호는 Settings.json의 deviceNumber(DeviceProfile)를 쓴다.
         public string messageServerHost = "127.0.0.1";
