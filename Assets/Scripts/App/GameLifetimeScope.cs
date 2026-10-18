@@ -38,6 +38,14 @@ namespace App
         /// </summary>
         private void ConfigureMessageSender(IContainerBuilder builder)
         {
+            // 부스 번호와 부스별 운영 로그 URL. TCP 메시지의 deviceNumber와 APIManager의 apiUrl이 같은 번호를 따른다.
+            DeviceProfile deviceProfile = JsonLoader.Load<DeviceProfile>(Constants.Files.AppSettings);
+            if (deviceProfile.deviceNumber != deviceProfile.ClampedDeviceNumber)
+            {
+                Debug.LogWarning($"[GameLifetimeScope] deviceNumber {deviceProfile.deviceNumber} in Settings.json is out of range (1–3). Using {deviceProfile.ClampedDeviceNumber}.");
+            }
+
+            builder.RegisterInstance(deviceProfile);
             builder.RegisterEntryPoint<MessageSender>(Lifetime.Singleton).AsSelf();
         }
 

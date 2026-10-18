@@ -3,6 +3,12 @@
   "resetTime": 20,
   "targetFrameRate": 60,
   "apiUrl": "",
+  "deviceNumber": 1,
+  "apiUrls": [
+    "",
+    "",
+    ""
+  ],
   "closeSetting": {
     "position": { "x": 1.0, "y": 1.0 },
     "numToClose": 10,

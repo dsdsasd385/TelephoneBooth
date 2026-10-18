@@ -42,6 +42,7 @@ namespace Network
         #region Private Fields
 
         private readonly DeviceSettings _settings;
+        private readonly DeviceProfile _deviceProfile;
         private readonly ILogger<MessageSender> _logger;
         private readonly IPublisher<ExternalApiCallEvent> _callPublisher;
         private readonly IPublisher<ExternalApiReturnEvent> _returnPublisher;
@@ -54,12 +55,13 @@ namespace Network
         #region Constructor & Lifecycle
 
         /// <summary>
-        /// VContainer 생성자 주입으로 장치 설정, 로거, 운영 로그 이벤트 발행자를 받음.
+        /// VContainer 생성자 주입으로 장치 설정, 부스 번호(Settings.json), 로거, 운영 로그 이벤트 발행자를 받음.
         /// </summary>
-        public MessageSender(DeviceSettings settings, ILogger<MessageSender> logger,
+        public MessageSender(DeviceSettings settings, DeviceProfile deviceProfile, ILogger<MessageSender> logger,
             IPublisher<ExternalApiCallEvent> callPublisher, IPublisher<ExternalApiReturnEvent> returnPublisher)
         {
             _settings = settings ?? new DeviceSettings();
+            _deviceProfile = deviceProfile ?? new DeviceProfile();
             _logger = logger;
             _callPublisher = callPublisher;
             _returnPublisher = returnPublisher;
@@ -96,7 +98,7 @@ namespace Network
             MessagePayload payload = new MessagePayload
             {
                 id = Guid.NewGuid().ToString("N"),
-                deviceNumber = _settings.deviceNumber,
+                deviceNumber = _deviceProfile.ClampedDeviceNumber,
                 content = ToContentName(content),
                 name = name ?? string.Empty,
                 text = text ?? string.Empty,

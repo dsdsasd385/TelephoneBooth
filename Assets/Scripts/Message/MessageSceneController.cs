@@ -6,6 +6,7 @@ using Cysharp.Threading.Tasks;
 using Data;
 using Hardware;
 using Media;
+using MessagePipe;
 using Microsoft.Extensions.Logging;
 using Network;
 using R3;
@@ -13,6 +14,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using VContainer;
+using HuliacDev.App;
 using HuliacDev.Utils;
 using ZLogger;
 
@@ -53,6 +55,7 @@ namespace Message
         private IReceiverInput _receiverInput;
         private MessageSender _messageSender;
         private ExperienceSession _session;
+        private IPublisher<MoveIdleEvent> _moveIdlePublisher;
         private IDisposable _subscriptions;
         private IDisposable _checkSubscriptions;
         private MessageSettings _settings = new MessageSettings();
@@ -67,12 +70,14 @@ namespace Message
         /// MessageLifetimeScope가 메서드 주입으로 의존성을 넣음.
         /// </summary>
         [Inject]
-        public void Construct(ILogger<MessageSceneController> logger, IReceiverInput receiverInput, MessageSender messageSender, ExperienceSession session)
+        public void Construct(ILogger<MessageSceneController> logger, IReceiverInput receiverInput, MessageSender messageSender, ExperienceSession session,
+            IPublisher<MoveIdleEvent> moveIdlePublisher)
         {
             _logger = logger;
             _receiverInput = receiverInput;
             _messageSender = messageSender;
             _session = session;
+            _moveIdlePublisher = moveIdlePublisher;
         }
 
         private void Start()
@@ -285,6 +290,8 @@ namespace Message
                 return;
             }
 
+            // 체험을 끝까지 마치고 대기로 돌아가는 경로라 move_idle 로그를 보낸다.
+            if (_moveIdlePublisher != null) _moveIdlePublisher.Publish(new MoveIdleEvent());
             SceneManager.LoadScene(Constants.Scenes.Idle);
         }
 

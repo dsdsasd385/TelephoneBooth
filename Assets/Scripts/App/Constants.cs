@@ -28,6 +28,8 @@ namespace App
             public const string Mission2Content = "Data/Mission2Content.json";
             // 미션3(민족수호) 화면별 TTS·오답 TTS·정답 효과음.
             public const string Mission3Content = "Data/Mission3Content.json";
+            // 템플릿 앱 설정. 프로젝트는 여기서 부스 번호와 부스별 운영 로그 URL(DeviceProfile)도 읽는다.
+            public const string AppSettings = "Settings.json";
             // PC마다 바꾸는 장치 설정(수화기 입력 방식·아두이노 요청 주기·응답 제한 시간).
             public const string DeviceSettings = "Data/DeviceSettings.json";
             // 9_Message 메시지 입력 설정(최대 글자 수).

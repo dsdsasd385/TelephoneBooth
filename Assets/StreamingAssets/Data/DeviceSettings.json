@@ -2,7 +2,6 @@
   "useArduino": false,
   "receiverRequestIntervalMs": 100,
   "receiverResponseTimeoutMs": 1000,
-  "deviceNumber": 1,
   "messageServerHost": "192.168.200.171",
   "messageServerPort": 5000,
   "messageSendTimeoutMs": 1500,
