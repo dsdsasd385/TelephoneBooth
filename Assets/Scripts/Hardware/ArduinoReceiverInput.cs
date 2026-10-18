@@ -34,6 +34,7 @@ namespace Hardware
         private CancellationTokenSource _pollCts;
         private double _lastResponseTime;
         private bool _isResponseTimedOut;
+        private bool _hasFirstResponse;
 
         public ReadOnlyReactiveProperty<bool> IsLifted => _isLifted;
 
@@ -69,9 +70,10 @@ namespace Hardware
         {
             try
             {
-                while (!cancellationToken.IsCancellationRequested && !_arduinoManager.IsConnected)
+                while (!cancellationToken.IsCancellationRequested && _arduinoManager && !_arduinoManager.IsConnected)
                 {
                     await _arduinoManager.ConnectAsync(Constants.Arduino.BaudRate, Constants.Arduino.Handshake);
+                    if (cancellationToken.IsCancellationRequested || !_arduinoManager) break;
                     if (_arduinoManager.IsConnected) break;
 
                     if (_logger != null) _logger.ZLogWarning($"[ArduinoReceiverInput] Arduino not found. Retrying in {ConnectRetryDelayMs}ms.");
@@ -81,6 +83,12 @@ namespace Hardware
             catch (OperationCanceledException)
             {
             }
+            catch (Exception) when (cancellationToken.IsCancellationRequested || !_arduinoManager)
+            {
+                // 포트 탐색은 스레드 풀에서 한 바퀴에 수 초가 걸려 Play 종료·씬 정리 뒤에 끝날 수 있다.
+                // 그때 템플릿이 파괴된 ArduinoManager의 GetCancellationTokenOnDestroy를 불러
+                // MissingReferenceException이 나므로, 종료 중이면 정상 종료로 본다.
+            }
         }
 
         /// <summary>
@@ -88,11 +96,12 @@ namespace Hardware
         /// </summary>
         private void OnConnected()
         {
-            if (_logger != null) _logger.ZLogInformation($"[ArduinoReceiverInput] Connected. Polling every {_deviceSettings.receiverRequestIntervalMs}ms.");
+            if (_logger != null) _logger.ZLogInformation($"[ArduinoReceiverInput] Arduino connected (handshake '{Constants.Arduino.Handshake}' OK). Polling every {_deviceSettings.receiverRequestIntervalMs}ms.");
 
             StopPolling();
             _lastResponseTime = Time.realtimeSinceStartupAsDouble;
             _isResponseTimedOut = false;
+            _hasFirstResponse = false;
             _pollCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
             PollStateAsync(_pollCts).Forget();
         }
@@ -152,14 +161,21 @@ namespace Hardware
         {
             string response = line.Trim();
 
+            // On/Off 응답만 남긴다. 핸드셰이크·알 수 없는 줄은 아래 분기에서 따로 처리한다.
+            bool isStateResponse = response == Constants.Arduino.ResponseHungUp || response == Constants.Arduino.ResponseLifted;
+            if (isStateResponse && _deviceSettings.logReceiverResponses && _logger != null)
+            {
+                _logger.ZLogInformation($"[ArduinoReceiverInput] {Constants.Arduino.RequestState} -> '{response}'");
+            }
+
             if (response == Constants.Arduino.ResponseHungUp)
             {
-                MarkResponseReceived();
+                MarkResponseReceived(response);
                 ApplyLifted(false);
             }
             else if (response == Constants.Arduino.ResponseLifted)
             {
-                MarkResponseReceived();
+                MarkResponseReceived(response);
                 ApplyLifted(true);
             }
             else if (response.Contains(Constants.Arduino.Handshake))
@@ -175,9 +191,16 @@ namespace Hardware
         /// <summary>
         /// 응답 시각을 기록하고, 응답이 끊겼다가 돌아왔으면 복구 로그를 남김.
         /// </summary>
-        private void MarkResponseReceived()
+        private void MarkResponseReceived(string response)
         {
             _lastResponseTime = Time.realtimeSinceStartupAsDouble;
+
+            if (!_hasFirstResponse)
+            {
+                // 연결 후 첫 On/Off는 상태가 바뀌지 않아도 남겨 State 요청·응답이 통하는지 확인할 수 있게 한다.
+                _hasFirstResponse = true;
+                if (_logger != null) _logger.ZLogInformation($"[ArduinoReceiverInput] First state response '{response}' received. Communication OK.");
+            }
 
             if (!_isResponseTimedOut) return;
 

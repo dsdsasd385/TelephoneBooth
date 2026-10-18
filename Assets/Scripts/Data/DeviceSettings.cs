@@ -12,6 +12,8 @@ namespace Data
         public bool useArduino;
         // 아두이노에 상태를 요청하는 주기(ms).
         public int receiverRequestIntervalMs = 100;
+        // true면 State 요청에 대한 On/Off 응답을 매번 로그로 남긴다(주기마다 한 줄씩 쌓이므로 확인할 때만 켠다).
+        public bool logReceiverResponses;
         // 이 시간(ms) 동안 응답이 없으면 연결 이상 로그를 남긴다. 수화기 상태는 마지막 값을 유지한다.
         public int receiverResponseTimeoutMs = 1000;
 
