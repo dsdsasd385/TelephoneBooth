@@ -710,17 +710,17 @@ MonoBehaviour:
   _choices:
   - button: {fileID: 1978895054}
     isCorrect: 0
-    feedbackTitle: {fileID: 21300000, guid: f4d0d8938485a7946aad8328f5e3ea2a, type: 3}
+    feedbackTitle: {fileID: 21300000, guid: dcb07c08830c4b744b62c49185a70a8c, type: 3}
     selectedMark: {fileID: 598432779}
     wrongSprite: {fileID: 0}
   - button: {fileID: 263858833}
     isCorrect: 0
-    feedbackTitle: {fileID: 21300000, guid: cc6cbb22c5545784db8537a7dd0eaa95, type: 3}
+    feedbackTitle: {fileID: 21300000, guid: 41ce5f65ecc995c45844a84f224e3670, type: 3}
     selectedMark: {fileID: 697267203}
     wrongSprite: {fileID: 0}
   - button: {fileID: 1277189880}
     isCorrect: 1
-    feedbackTitle: {fileID: 21300000, guid: f5fef1ca4610b2e498a5a2a326ca7f57, type: 3}
+    feedbackTitle: {fileID: 21300000, guid: dbfe5db9e4455be4496e38e000d70f89, type: 3}
     selectedMark: {fileID: 446505155}
     wrongSprite: {fileID: 0}
   _nextButton: {fileID: 1604748385}
@@ -1630,6 +1630,7 @@ MonoBehaviour:
   _buttonFadeSeconds: 0.5
   _autoAdvanceDelaySeconds: 0.5
   _historyNextButton: {fileID: 311523306}
+  _historyButtonDelaySeconds: 2
   _messageButton: {fileID: 361376004}
   _otherMissionButton: {fileID: 1677910197}
   _missionTargets:
@@ -1865,7 +1866,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &651207854
 RectTransform:
   m_ObjectHideFlags: 0
@@ -5657,7 +5658,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uD655 \uC778"
+  m_text: "\uD655\uC778"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 0664e4d4dfda7c34293f5533348e630b, type: 2}
   m_sharedMaterial: {fileID: -1770936258835133197, guid: 0664e4d4dfda7c34293f5533348e630b,
