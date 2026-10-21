@@ -3,5 +3,6 @@
   "mapTts": "Audio/Mission3/미션3_01-2_수정2.wav",
   "passwordTts": "Audio/Mission3/미션3_02-1.wav",
   "failTts": "Audio/Mission3/미션3_02-2.wav",
-  "correctSfx": "Audio/Mission3/미션3_문제해결시 나오는 사운드.wav"
+  "correctSfx": "Audio/Mission3/미션3_문제해결시 나오는 사운드.wav",
+  "endTts": "Audio/Mission3/미션3_03.wav"
 }

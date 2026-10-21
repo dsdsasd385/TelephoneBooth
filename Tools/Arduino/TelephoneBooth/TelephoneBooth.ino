@@ -17,7 +17,7 @@ const char RESPONSE_HUNG_UP[] = "On";
 const char RESPONSE_LIFTED[] = "Off";
 
 // 훅 스위치 입력 핀과 논리.
-const uint8_t HOOK_PIN = 2;
+const uint8_t HOOK_PIN = 8;
 const bool HUNG_UP_WHEN_LOW = true;
 
 // 스위치 떨림을 무시하는 시간. 이 시간 동안 값이 그대로여야 상태를 바꾼다.

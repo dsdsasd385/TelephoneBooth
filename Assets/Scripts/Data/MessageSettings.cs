@@ -12,9 +12,9 @@ namespace Data
         public int maxLength = 30;
         // 이름 최대 글자 수.
         public int nameMaxLength = 10;
-        // 보내기 후 MessageVideo에 한 번 재생할 로딩 영상(StreamingAssets 기준 상대 경로).
-        public string loadingVideo = "Video/Message/수호메시지_로딩영상_v2.mp4";
-        // 로딩 영상이 끝난 뒤 0_Idle로 넘어가기 전에 기다리는 시간(초). 기다리는 동안 영상 마지막 프레임이 보인다.
-        public float idleReturnDelaySeconds = 2f;
+        // 보내기 후 MessageVideo에 재생할 로딩 영상(StreamingAssets 기준 상대 경로).
+        public string loadingVideo = "Video/Message/수호메시지_로딩영상_v4.mp4";
+        // 로딩 영상을 이어서 재생할 횟수. 다 재생하면 바로 0_Idle로 간다. 1 미만이면 1번.
+        public int loadingVideoPlayCount = 2;
     }
 }

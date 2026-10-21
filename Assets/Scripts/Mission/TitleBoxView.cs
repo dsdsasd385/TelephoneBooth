@@ -1,4 +1,5 @@
 using DG.Tweening;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,6 +11,10 @@ namespace Mission
     /// 기본 Sprite는 씬에 처음 적용된 이미지다. 오답·정답 문구 Sprite는 선택지마다 다르며 호출자가 넘긴다.
     /// 오답이면 페이드 없이 바로 바꾸고 가로로만 짧게 흔든다(작업계획서 7.4). 연달아 흔들면 이전 흔들림을
     /// 끝까지 진행(Complete)해 원위치로 돌린 뒤 다시 시작하므로 위치가 밀리지 않는다.
+    /// </para>
+    /// <para>
+    /// ShowLookOf로 다른 TitleBox(예: Mission3 FailTitleImage)의 Sprite·크기·위치와 자식 문구(Text·글자 크기·위치)를
+    /// 그대로 빌려 보여 줄 수 있다. ShowDefault가 씬에 처음 적용된 모습으로 되돌린다.
     /// </para>
     /// </summary>
     [RequireComponent(typeof(Image))]
@@ -27,8 +32,19 @@ namespace Mission
 
         private Image _image;
         private RectTransform _rect;
+        private TMP_Text _text;
+        private RectTransform _textRect;
         private Sprite _defaultSprite;
+        // 흔들림이 끝나면 돌아갈 위치. ShowLookOf 중에는 빌려 온 위치다.
         private Vector2 _originPosition;
+        // 씬에 처음 적용된 위치·크기·문구. ShowLookOf 뒤 ShowDefault가 되돌린다.
+        private Vector2 _defaultPosition;
+        private Vector2 _defaultSize;
+        private string _defaultText;
+        private float _defaultFontSize;
+        private Vector2 _defaultTextPosition;
+        private Vector2 _defaultTextSize;
+        private bool _isLookBorrowed;
         private Tween _shakeTween;
         private TweenCallback _onShakeComplete;
         private bool _isCached;
@@ -74,6 +90,31 @@ namespace Mission
             CacheDefaults();
             StopShake();
             _image.sprite = _defaultSprite;
+
+            if (!_isLookBorrowed) return;
+
+            _isLookBorrowed = false;
+            ApplyLook(_defaultPosition, _defaultSize, _defaultText, _defaultFontSize, _defaultTextPosition, _defaultTextSize);
+        }
+
+        /// <summary>
+        /// source의 씬 모습(Sprite·크기·위치, 자식 문구의 Text·글자 크기·위치)을 그대로 빌려 보여 줌. shake가 true면 가로로 흔든다.
+        /// 두 TitleBox의 부모가 같은 배치(전체 화면 루트)라고 보고 anchoredPosition을 그대로 옮긴다.
+        /// </summary>
+        public void ShowLookOf(TitleBoxView source, bool shake)
+        {
+            if (!source) return;
+
+            CacheDefaults();
+            source.CacheDefaults();
+            StopShake();
+
+            _isLookBorrowed = true;
+            _image.sprite = source._defaultSprite;
+            ApplyLook(source._defaultPosition, source._defaultSize, source._defaultText, source._defaultFontSize,
+                source._defaultTextPosition, source._defaultTextSize);
+
+            if (shake) Shake();
         }
 
         /// <summary>
@@ -101,8 +142,38 @@ namespace Mission
             _rect = (RectTransform)transform;
             _defaultSprite = _image.sprite;
             _originPosition = _rect.anchoredPosition;
+            _defaultPosition = _rect.anchoredPosition;
+            _defaultSize = _rect.sizeDelta;
+
+            _text = GetComponentInChildren<TMP_Text>(true);
+            if (_text)
+            {
+                _textRect = _text.rectTransform;
+                _defaultText = _text.text;
+                _defaultFontSize = _text.fontSize;
+                _defaultTextPosition = _textRect.anchoredPosition;
+                _defaultTextSize = _textRect.sizeDelta;
+            }
+
             _onShakeComplete = ResetPosition;
             _isCached = true;
+        }
+
+        /// <summary>
+        /// 위치·크기와 자식 문구를 바꾸고 흔들림 원위치도 새 위치로 맞춤. 문구가 없으면 문구는 그대로 둔다.
+        /// </summary>
+        private void ApplyLook(Vector2 position, Vector2 size, string text, float fontSize, Vector2 textPosition, Vector2 textSize)
+        {
+            _originPosition = position;
+            _rect.anchoredPosition = position;
+            _rect.sizeDelta = size;
+
+            if (!_text || text == null) return;
+
+            _text.text = text;
+            _text.fontSize = fontSize;
+            _textRect.anchoredPosition = textPosition;
+            _textRect.sizeDelta = textSize;
         }
 
         /// <summary>

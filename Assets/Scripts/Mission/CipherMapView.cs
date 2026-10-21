@@ -24,7 +24,7 @@ namespace Mission
     /// <para>
     /// PlayOutlinesAsync는 아웃라인을 차례로 페이드인하고, 버튼은 _buttonReveal에 따라 아웃라인과 함께 하나씩 또는 아웃라인이 다 나온 뒤
     /// 한꺼번에 페이드인한다. ResetState(true)는 아웃라인·버튼을 바로 보여 준다. 버튼 페이드는 버튼 Image 알파로 한다.
-    /// 버튼을 누르면 그 버튼의 첫 자식(선택 표시)만 켜고 Clicked로 버튼을 알린다. 입력 막기는 CanvasGroup.blocksRaycasts로 해서
+    /// 버튼(또는 같은 순번의 _clickTargets)을 누르면 그 버튼의 첫 자식(선택 표시)만 켜고 Clicked로 버튼을 알린다. 입력 막기는 CanvasGroup.blocksRaycasts로 해서
     /// 버튼이 비활성 색으로 바뀌지 않는다. 연출용 지도(Title1MapImage)는 _isInteractable을 꺼 두어 항상 막혀 있다.
     /// </para>
     /// </summary>
@@ -38,6 +38,9 @@ namespace Mission
         // 나타나는 순서대로.
         [SerializeField] private Graphic[] _outlines = Array.Empty<Graphic>();
         [SerializeField] private Button[] _buttons = Array.Empty<Button>();
+        // 실제로 누르는 대상(Title2MapImage는 OutlineGroup의 아웃라인). 누르면 같은 순번의 _buttons를 누른 것으로 친다.
+        // 정답 판정·선택 표시는 _buttons 기준 그대로다. 비어 있거나 빠진 순번은 _buttons를 직접 누른다.
+        [SerializeField] private Button[] _clickTargets = Array.Empty<Button>();
 
         [Header("아웃라인 연출")]
         // 아웃라인 하나가 나타나기 시작한 뒤 다음 아웃라인이 시작하기까지의 시간(초).
@@ -126,7 +129,7 @@ namespace Mission
         #region Public Methods
 
         /// <summary>
-        /// 장소 버튼 클릭을 구독함. 씬 매니저가 시작할 때 한 번 부른다.
+        /// 장소 클릭을 구독함. _clickTargets가 있으면 그 대상을, 없으면 장소 버튼을 누를 때 장소 버튼을 알린다. 씬 매니저가 시작할 때 한 번 부른다.
         /// </summary>
         public void Bind()
         {
@@ -138,7 +141,8 @@ namespace Mission
                 Button button = _buttons[i];
                 if (!button) continue;
 
-                button.OnClickAsObservable()
+                Button source = i < _clickTargets.Length && _clickTargets[i] ? _clickTargets[i] : button;
+                source.OnClickAsObservable()
                     .Subscribe(_ => OnButtonClicked(button))
                     .AddTo(ref builder);
             }

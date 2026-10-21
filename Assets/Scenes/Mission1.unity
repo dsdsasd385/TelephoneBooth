@@ -1323,7 +1323,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 1183306dc0bc54e459a4d0812261ffe7, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 12b1c046535432a49baa1732cabda8df, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1866,7 +1866,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &651207854
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2080,7 +2080,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: e86de3d5938097e4498b7d58fd2aa341, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1c9542d24c0745448a8cd377c8f2cf2d, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -5348,7 +5348,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 656e9111ce22b6243af9222a193ed298, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 12b1c046535432a49baa1732cabda8df, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -5383,7 +5383,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1720147678
 RectTransform:
   m_ObjectHideFlags: 0
@@ -5439,7 +5439,7 @@ MonoBehaviour:
     wrongSprite: {fileID: 0}
   - button: {fileID: 1983207685}
     isCorrect: 0
-    feedbackTitle: {fileID: 21300000, guid: 7c5c74980fb4c06408ba8ebe5626883b, type: 3}
+    feedbackTitle: {fileID: 21300000, guid: e93e93db53b5da048b961eb8eec66471, type: 3}
     selectedMark: {fileID: 1405776134}
     wrongSprite: {fileID: 0}
   - button: {fileID: 1811761863}

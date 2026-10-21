@@ -113,6 +113,19 @@ namespace Mission
         }
 
         /// <summary>
+        /// 마무리 선택 화면을 버튼을 숨긴 채 켬. TTS가 끝난 뒤 ShowEndSelectAsync로 버튼을 페이드인할 때 먼저 부른다.
+        /// </summary>
+        public void PrepareEndSelect()
+        {
+            CancelFade();
+            _isLocked = true;
+            if (_otherMissionScreen) _otherMissionScreen.SetActive(false);
+            if (_endSelectScreen) _endSelectScreen.SetActive(true);
+            SetGroup(_messageButton, 0f, false);
+            SetGroup(_otherMissionButton, 0f, false);
+        }
+
+        /// <summary>
         /// 마무리 선택 화면을 켜고 버튼을 페이드인함. 페이드가 끝나야 누를 수 있다.
         /// </summary>
         public UniTask ShowEndSelectAsync(CancellationToken cancellationToken)
