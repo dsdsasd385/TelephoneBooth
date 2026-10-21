@@ -105,6 +105,7 @@ namespace Mission
         private IPublisher<MoveIdleEvent> _moveIdlePublisher;
         private ExperienceSession _session;
         private ProjectInputActions _inputActions;
+        private InactivityTimerGate _inactivityGate;
         private Action<InputAction.CallbackContext> _onNextScreenKey;
         private Action<InputAction.CallbackContext> _onPreviousScreenKey;
 
@@ -133,17 +134,19 @@ namespace Mission
         #region Dependency Injection & Unity Lifecycle
 
         /// <summary>
-        /// VContainer 의존성 주입으로 로거, 수화기 입력, 대기 화면 복귀 이벤트 발행자, 체험 세션, 입력 액션을 할당함.
+        /// VContainer 의존성 주입으로 로거, 수화기 입력, 대기 화면 복귀 이벤트 발행자, 체험 세션, 입력 액션, 무입력 타이머 제어를 할당함.
         /// </summary>
         [Inject]
         public void Construct(ILogger<Mission1SceneController> logger, IReceiverInput receiverInput,
-            IPublisher<MoveIdleEvent> moveIdlePublisher, ExperienceSession session, ProjectInputActions inputActions)
+            IPublisher<MoveIdleEvent> moveIdlePublisher, ExperienceSession session, ProjectInputActions inputActions,
+            InactivityTimerGate inactivityGate)
         {
             _logger = logger;
             _receiverInput = receiverInput;
             _moveIdlePublisher = moveIdlePublisher;
             _session = session;
             _inputActions = inputActions;
+            _inactivityGate = inactivityGate;
         }
 
         /// <summary>
@@ -514,6 +517,7 @@ namespace Mission
             {
                 await UniTask.WaitUntil(_isTtsFinished, PlayerLoopTiming.Update, cts.Token);
                 await stage.FadeInNextAsync(_buttonFadeSeconds, cts.Token);
+                OpenInactivityTimer();
             }
             catch (OperationCanceledException)
             {
@@ -699,6 +703,7 @@ namespace Mission
 
             CancelPageFlow();
             CancelFeedback();
+            if (_inactivityGate != null) _inactivityGate.CloseInput();
 
             // 교체 전까지 이전 화면이 보일 수 있으므로 그 버튼·선택지가 눌리지 않게 먼저 잠근다.
             if (_visibleIndex >= 0) LockPage(_visibleIndex);
@@ -776,6 +781,7 @@ namespace Mission
                 if (stage)
                 {
                     await stage.FadeInChoicesAsync(_buttonFadeSeconds, cts.Token);
+                    OpenInactivityTimer();
                     return;
                 }
 
@@ -921,6 +927,15 @@ namespace Mission
 
             await UniTask.WhenAll(fades);
             SetButtonsInteractable(index, true);
+            OpenInactivityTimer();
+        }
+
+        /// <summary>
+        /// 버튼·선택지를 누를 수 있게 된 순간 무입력 타이머를 처음부터 셈. TTS(피드백 포함)가 재생되는 동안은 멈춘다.
+        /// </summary>
+        private void OpenInactivityTimer()
+        {
+            if (_inactivityGate != null) _inactivityGate.OpenInput(_mediaPlayer);
         }
 
         /// <summary>

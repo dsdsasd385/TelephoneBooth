@@ -1,4 +1,5 @@
 using System;
+using App;
 using MessagePipe;
 using UnityEngine.SceneManagement;
 using VContainer;
@@ -49,9 +50,9 @@ namespace Core
         }
 
         /// <summary>
-        /// 최초 화면으로 되돌아갈 때 호출되는 훅. 화면/패널 전환 시스템이 아직 없어 기본
-        /// 구현은 현재 씬을 재로드하는 최소 동작만 수행하며, 전환 시스템이 생기면 프로젝트에서
-        /// override해 교체할 것.
+        /// 최초 화면으로 되돌아갈 때 호출되는 훅. 어느 씬에 있든 0_Idle을 불러와 ① 대기부터 시작한다
+        /// (작업계획서 5.1). 9_Message에서 쓰던 메시지는 씬과 함께 버려진다. 수화기가 들려 있으면
+        /// IdleSceneController가 ①에서 수화기 확인 화면(CheckScreen)을 띄운다.
         /// <para>
         /// 수동 복귀 경로(예: 콘텐츠 종료 버튼)를 추가할 때는 이 메서드를 호출하기 전후로
         /// IPublisher&lt;MoveIdleEvent&gt;.Publish(new MoveIdleEvent())를 직접 호출해 move_idle
@@ -63,7 +64,7 @@ namespace Core
         /// </summary>
         protected virtual void ReturnToFirstScreen()
         {
-            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+            SceneManager.LoadScene(Constants.Scenes.Idle);
         }
     }
 }

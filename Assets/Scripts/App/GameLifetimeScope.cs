@@ -26,6 +26,16 @@ namespace App
             ConfigureReceiverInput(builder);
             ConfigureSession(builder);
             ConfigureMessageSender(builder);
+            ConfigureInactivityTimer(builder);
+        }
+
+        /// <summary>
+        /// 무입력 타이머를 화면 상태(버튼 입력 가능·TTS 재생)에 맞춰 멈추고 다시 세는 서비스를 등록함.
+        /// InactivityTimer는 템플릿이 씬에 있으면 등록한다(루트 프리팹에 있음).
+        /// </summary>
+        private void ConfigureInactivityTimer(IContainerBuilder builder)
+        {
+            builder.RegisterEntryPoint<InactivityTimerGate>(Lifetime.Singleton).AsSelf();
         }
 
         /// <summary>

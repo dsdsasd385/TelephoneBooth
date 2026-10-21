@@ -54,7 +54,9 @@ namespace Mission
     /// 같은 이미지·같은 암호가 같은 자리에서 시작해 바뀌는 순간이 보이지 않는다. 이어서 암호 토큰 사이 공백 벌리기(13 30 14 39 15 39 0022) →
     /// 해독 자모를 각 토큰 숫자 아래 가운데에 놓고 한 글자씩 페이드인. 효과음까지 끝나고 _endDelaySeconds(1초) 뒤
     /// 마무리 선택 화면(MissionEndView: 메시지 보내기 → 9_Message, 다른 미션 → 미션1·2)으로 넘어간다.
-    /// 오답이면 FailScreen(오답 문구를 TitleBoxView로 가로로 흔듦)과 오답 TTS를 보여 준 뒤 SelectScreen으로 돌아와 다시 고르게 한다.
+    /// 오답이면 SelectScreen에 그대로 머물며 TitleImage를 FailTitleImage의 Sprite·문구로 바꿔 가로로 흔들고 오답 TTS를 들려준 뒤,
+    /// TTS가 끝나면 TitleImage를 원래 Sprite·문구로 되돌리고 다시 고르게 한다(_failTitleBox가 비어 있으면 문구는 그대로 두고 TTS만 들려준다).
+    /// 지도를 고를 수 있는 동안 PawwordTable을 누르면 위치·크기는 그대로 두고 Sprite만 암호표 1로 바꾸며 Pointer를 끈다. SelectScreen에 다시 들어오면 되돌린다.
     /// </para>
     /// <para>
     /// 경로가 빈 TTS는 _noTtsLineSeconds 동안 보여 준다.
@@ -81,8 +83,7 @@ namespace Mission
         [SerializeField] private GameObject _guideScreen;
         [SerializeField] private GameObject _mapScreen;
         [SerializeField] private GameObject _selectScreen;
-        [SerializeField] private GameObject _failScreen;
-        // FailScreen의 오답 문구(FailTitleImage). 오답일 때 Mission2처럼 가로로 흔든다.
+        // 오답 문구 모습(Sprite·문구)의 원본 TitleBox. 오답일 때 SelectScreen TitleImage가 빌려 쓴다. 비어 있으면 문구를 바꾸지 않는다.
         [SerializeField] private TitleBoxView _failTitleBox;
 
         [Header("Guide2")]
@@ -94,10 +95,18 @@ namespace Mission
         [Header("SelectScreen")]
         // 지도가 옮겨지는 동안 아래의 Guide2가 보이도록 끄는 SelectScreen 배경.
         [SerializeField] private GameObject _selectBackground;
+        // SelectScreen 문구(TitleImage). 오답일 때 FailTitleImage 모습으로 바꿔 흔들고 TTS가 끝나면 되돌린다.
+        [SerializeField] private TitleBoxView _selectTitleBox;
         [SerializeField] private CipherMapView _selectMap;
         [SerializeField] private CanvasGroup _passwordGroup;
         [SerializeField] private PasswordTextView _passwordText;
         [SerializeField] private CanvasGroup _tableGroup;
+        // PawwordTable 버튼. 누르면 Sprite를 _openedTableSprite로 바꾸고 _tablePointer를 끈다. 지도 입력을 받을 때만 눌린다(_tableGroup.blocksRaycasts).
+        [SerializeField] private Button _passwordTableButton;
+        // PawwordTable을 누른 뒤 보여 줄 Sprite(암호표 1). 위치·크기는 그대로 둔다.
+        [SerializeField] private Sprite _openedTableSprite;
+        // PawwordTable을 누르라고 깜빡이는 손가락(Pointer). 누르면 끈다.
+        [SerializeField] private GameObject _tablePointer;
         // 정답 후보(ㄷㅏㄹㅣㅁㅣㅌ → 3_RiverBtn, ㅅㅏㄴㅅㅏㅇㅣ → 2_MountainBtn). SelectScreen에 들어갈 때마다 하나를 골라 암호를 만든다.
         [SerializeField] private CipherAnswer[] _answers = Array.Empty<CipherAnswer>();
         // 켜면 정답 후보 중 하나를 무작위로, 끄면 항상 첫 번째 후보(다리밑)를 쓴다. 산사이용 마무리 문구·TTS가 없어 꺼 둔다.
@@ -155,7 +164,12 @@ namespace Mission
         private AudioClip _passwordClip;
         private AudioClip _failClip;
         private AudioClip _correctClip;
+        private AudioClip _endClip;
         private Sequence _introSequence;
+        // PawwordTable의 씬 Sprite. SelectScreen에 다시 들어올 때 되돌린다.
+        private Sprite _closedTableSprite;
+        // PawwordTable을 눌러 암호표 1로 바꿨는지. 바꾼 뒤에는 지도 입력이 다시 열려도 PawwordTable은 눌리지 않는다.
+        private bool _isTableOpened;
         // 이번에 고른 정답의 장소 버튼과 해독 자모 위치 계산용 버퍼.
         private Button _answerButton;
         private readonly List<float> _tokenCenters = new List<float>();
@@ -168,6 +182,7 @@ namespace Mission
         private int _currentIndex = -1;
 
         private ProjectInputActions _inputActions;
+        private InactivityTimerGate _inactivityGate;
         private Action<InputAction.CallbackContext> _onNextScreenKey;
         private Action<InputAction.CallbackContext> _onPreviousScreenKey;
 
@@ -176,17 +191,19 @@ namespace Mission
         #region Dependency Injection & Unity Lifecycle
 
         /// <summary>
-        /// VContainer 의존성 주입으로 로거, 수화기 입력, 대기 화면 복귀 이벤트 발행자, 체험 세션, 입력 액션을 할당함.
+        /// VContainer 의존성 주입으로 로거, 수화기 입력, 대기 화면 복귀 이벤트 발행자, 체험 세션, 입력 액션, 무입력 타이머 제어를 할당함.
         /// </summary>
         [Inject]
         public void Construct(ILogger<Mission3SceneController> logger, IReceiverInput receiverInput,
-            IPublisher<MoveIdleEvent> moveIdlePublisher, ExperienceSession session, ProjectInputActions inputActions)
+            IPublisher<MoveIdleEvent> moveIdlePublisher, ExperienceSession session, ProjectInputActions inputActions,
+            InactivityTimerGate inactivityGate)
         {
             _logger = logger;
             _receiverInput = receiverInput;
             _moveIdlePublisher = moveIdlePublisher;
             _session = session;
             _inputActions = inputActions;
+            _inactivityGate = inactivityGate;
         }
 
         /// <summary>
@@ -267,6 +284,17 @@ namespace Mission
                 _logger.ZLogError($"[Mission3SceneController] CipherMapView is not assigned: {nameof(_selectMap)}");
             }
 
+            if (_passwordTableButton)
+            {
+                _passwordTableButton.OnClickAsObservable()
+                    .Subscribe(this, static (_, self) => self.SetTableOpened(true))
+                    .AddTo(ref builder);
+            }
+            else if (_logger != null)
+            {
+                _logger.ZLogError($"[Mission3SceneController] Button is not assigned: {nameof(_passwordTableButton)}");
+            }
+
             if (_end)
             {
                 _end.Bind();
@@ -301,12 +329,13 @@ namespace Mission
                 Mission3ContentTable table = await JsonLoader.LoadAsync<Mission3ContentTable>(Constants.Files.Mission3Content, cancellationToken, _logger);
 
                 // 파일을 하나씩 기다리면 첫 화면이 늦어지므로 모두 동시에 읽는다.
-                (_guideClip, _mapClip, _passwordClip, _failClip, _correctClip) = await UniTask.WhenAll(
+                (_guideClip, _mapClip, _passwordClip, _failClip, _correctClip, _endClip) = await UniTask.WhenAll(
                     _mediaPlayer.LoadClipAsync(table.guideTts, cancellationToken),
                     _mediaPlayer.LoadClipAsync(table.mapTts, cancellationToken),
                     _mediaPlayer.LoadClipAsync(table.passwordTts, cancellationToken),
                     _mediaPlayer.LoadClipAsync(table.failTts, cancellationToken),
-                    _mediaPlayer.LoadClipAsync(table.correctSfx, cancellationToken));
+                    _mediaPlayer.LoadClipAsync(table.correctSfx, cancellationToken),
+                    _mediaPlayer.LoadClipAsync(table.endTts, cancellationToken));
             }
             catch (OperationCanceledException)
             {
@@ -388,6 +417,7 @@ namespace Mission
         {
             CancelFlow();
             KillIntroSequence();
+            if (_inactivityGate != null) _inactivityGate.CloseInput();
             if (_mediaPlayer) _mediaPlayer.PlayClip(null);
             if (_end) _end.Hide();
 
@@ -408,6 +438,7 @@ namespace Mission
         {
             CancelFlow();
             KillIntroSequence();
+            if (_inactivityGate != null) _inactivityGate.CloseInput();
             HideAllPages();
             _currentIndex = EndPageIndex;
 
@@ -416,13 +447,19 @@ namespace Mission
         }
 
         /// <summary>
-        /// 마무리 선택 화면 버튼 페이드인. 취소되면 그 상태에 둔다.
+        /// 마무리 선택 화면을 버튼 없이 켜고 TTS(endTts)가 끝나면 버튼을 페이드인함. 페이드가 끝나 누를 수 있게 되면 무입력 타이머를 센다.
+        /// 취소되면 그 상태에 둔다.
         /// </summary>
         private async UniTaskVoid RunEndAsync(CancellationTokenSource cts)
         {
             try
             {
+                _end.PrepareEndSelect();
+                _mediaPlayer.PlayClip(_endClip);
+                if (_endClip) await UniTask.WaitUntil(_isTtsFinished, PlayerLoopTiming.Update, cts.Token);
+
                 await _end.ShowEndSelectAsync(cts.Token);
+                if (_inactivityGate != null) _inactivityGate.OpenInput(_mediaPlayer);
             }
             catch (OperationCanceledException)
             {
@@ -531,11 +568,13 @@ namespace Mission
 
             if (_passwordGroup) await PlayIntroSequenceAsync(DOTween.Sequence().Append(_passwordGroup.DOFade(1f, _fadeSeconds)), token);
             if (_passwordText) await _passwordText.PlayTypingAsync(token);
+            // Pointer는 PawwordTable과 함께 켜져 페이드인한 뒤 깜빡임을 반복한다(LoopFadeView).
+            SetPointerActive(true);
             if (_tableGroup) await PlayIntroSequenceAsync(DOTween.Sequence().Append(_tableGroup.DOFade(1f, _fadeSeconds)), token);
 
             await tts;
 
-            if (_selectMap) _selectMap.SetInputEnabled(true);
+            SetSelectInputEnabled(true);
         }
 
         /// <summary>
@@ -571,7 +610,7 @@ namespace Mission
             ShowRoot(_selectScreen);
             _currentIndex = SelectPageIndex;
 
-            if (_selectMap) _selectMap.SetInputEnabled(true);
+            SetSelectInputEnabled(true);
         }
 
         /// <summary>
@@ -581,6 +620,12 @@ namespace Mission
         {
             _isSolved = false;
             PickAnswer();
+
+            if (_selectTitleBox) _selectTitleBox.ShowDefault();
+            SetTableOpened(false);
+            // 등장 연출에서는 PawwordTable이 나타날 때 함께 켠다.
+            SetPointerActive(!isIntro);
+            SetTableInputEnabled(false);
 
             if (!isIntro) RestoreTransitionState();
 
@@ -598,6 +643,54 @@ namespace Mission
                 if (isIntro) _passwordText.ResetState();
                 else _passwordText.ShowAll();
             }
+        }
+
+        /// <summary>
+        /// 지도 버튼과 PawwordTable 버튼 입력을 함께 열거나 막음. 무입력 타이머도 함께 열고(처음부터 셈) 닫는다.
+        /// </summary>
+        private void SetSelectInputEnabled(bool isEnabled)
+        {
+            if (_selectMap) _selectMap.SetInputEnabled(isEnabled);
+            SetTableInputEnabled(isEnabled);
+
+            if (_inactivityGate == null) return;
+            if (isEnabled) _inactivityGate.OpenInput(_mediaPlayer);
+            else _inactivityGate.CloseInput();
+        }
+
+        /// <summary>
+        /// PawwordTable 버튼 입력을 열거나 막음. 등장 연출로 안 보일 때, 이미 눌러 암호표 1로 바꾼 뒤에는 눌리지 않게 한다.
+        /// </summary>
+        private void SetTableInputEnabled(bool isEnabled)
+        {
+            if (_tableGroup) _tableGroup.blocksRaycasts = isEnabled && !_isTableOpened;
+        }
+
+        /// <summary>
+        /// PawwordTable Sprite를 암호표 1(열림) 또는 씬 Sprite(닫힘)로 바꿈. 열면 Pointer를 끄고 PawwordTable 터치 입력을 막는다.
+        /// </summary>
+        private void SetTableOpened(bool isOpened)
+        {
+            _isTableOpened = isOpened;
+
+            if (_passwordTableButton && _passwordTableButton.image)
+            {
+                Sprite sprite = isOpened ? _openedTableSprite : _closedTableSprite;
+                if (sprite) _passwordTableButton.image.sprite = sprite;
+            }
+
+            if (!isOpened) return;
+
+            SetPointerActive(false);
+            SetTableInputEnabled(false);
+        }
+
+        /// <summary>
+        /// PawwordTable을 가리키는 Pointer를 켜거나 끔. 켜지면 LoopFadeView가 페이드인한 뒤 깜빡임을 반복한다.
+        /// </summary>
+        private void SetPointerActive(bool isActive)
+        {
+            if (_tablePointer) _tablePointer.SetActive(isActive);
         }
 
         /// <summary>
@@ -673,6 +766,7 @@ namespace Mission
         {
             if (_successPassword) _successPasswordPosition = _successPassword.position;
             if (_successBackground) _successBackgroundAlpha = _successBackground.color.a;
+            if (_passwordTableButton && _passwordTableButton.image) _closedTableSprite = _passwordTableButton.image.sprite;
         }
 
         /// <summary>
@@ -703,7 +797,6 @@ namespace Mission
             SetScreenActive(_guideScreen, root);
             SetScreenActive(_mapScreen, root);
             SetScreenActive(_selectScreen, root);
-            SetScreenActive(_failScreen, root);
             SetScreenActive(_successScreen, root);
         }
 
@@ -732,7 +825,6 @@ namespace Mission
             if (_guideScreen) _guideScreen.SetActive(false);
             if (_mapScreen) _mapScreen.SetActive(false);
             if (_selectScreen) _selectScreen.SetActive(false);
-            if (_failScreen) _failScreen.SetActive(false);
             if (_successScreen) _successScreen.SetActive(false);
             if (_end) _end.Hide();
         }
@@ -823,7 +915,7 @@ namespace Mission
             bool isCorrect = button && button == _answerButton;
             if (_logger != null) _logger.ZLogInformation($"[Mission3SceneController] Place selected: {(button ? button.name : "null")} ({(isCorrect ? "correct" : "wrong")}).");
 
-            _selectMap.SetInputEnabled(false);
+            SetSelectInputEnabled(false);
             CancelFlow();
             _flowCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
 
@@ -839,22 +931,18 @@ namespace Mission
         }
 
         /// <summary>
-        /// 오답: FailScreen(오답 문구 흔들기)과 오답 TTS를 보여 준 뒤 SelectScreen으로 돌아와 선택 표시를 지우고 다시 고르게 함.
+        /// 오답: SelectScreen TitleImage를 FailTitleImage 모습으로 바꿔 흔들고 오답 TTS를 들려준 뒤, 원래 문구로 되돌리고 선택 표시를 지워 다시 고르게 함.
         /// </summary>
         private async UniTaskVoid RunWrongAsync(CancellationTokenSource cts)
         {
             try
             {
-                ShowRoot(_failScreen);
-                if (_failTitleBox) _failTitleBox.ShowFeedback(null, true);
+                if (_selectTitleBox) _selectTitleBox.ShowLookOf(_failTitleBox, true);
                 await PlayTtsAndWaitAsync(_failClip, cts.Token);
 
-                ShowRoot(_selectScreen);
-                if (_selectMap)
-                {
-                    _selectMap.ClearSelection();
-                    _selectMap.SetInputEnabled(true);
-                }
+                if (_selectTitleBox) _selectTitleBox.ShowDefault();
+                if (_selectMap) _selectMap.ClearSelection();
+                SetSelectInputEnabled(true);
             }
             catch (OperationCanceledException)
             {

@@ -12,7 +12,6 @@ using Network;
 using R3;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 using VContainer;
 using HuliacDev.App;
 using HuliacDev.Utils;
@@ -24,7 +23,7 @@ namespace Message
     /// 9_Message(공용 종료 흐름, 작업계획서 9장) 씬의 흐름을 관리하는 씬 매니저.
     /// <para>
     /// 화면 순서: CheckScreen("수화기를 내려놓아 주세요") → MessageScreen(이름·다짐 입력) → 로딩 영상 → 0_Idle.
-    /// CheckScreen의 Next 버튼은 수화기가 걸려 있을 때만 누를 수 있다(들려 있으면 interactable을 끈다).
+    /// CheckScreen은 수화기를 내려놓는 순간(걸린 상태가 되면) 버튼 없이 바로 MessageScreen으로 넘어간다.
     /// </para>
     /// <para>
     /// 설정에서 최대 글자 수를 읽어 입력 뷰를 묶는다. 보내기(다짐 칸 Enter)를 받으면 MessageSender로 TCP 전송을 시작하고
@@ -32,16 +31,18 @@ namespace Message
     /// 영상이 덮고 있는 동안은 다시 보낼 수 없다.
     /// </para>
     /// <para>
-    /// 아직 없는 것: 완료 문구, 건너뛰기, 무입력 타임아웃.
+    /// 무입력 타이머(5.1)는 입력 화면이 나온 순간부터 보내기 전까지 센다. 타임아웃이면 쓰던 메시지는 버리고 0_Idle로 간다(GameManager).
+    /// </para>
+    /// <para>
+    /// 아직 없는 것: 완료 문구, 건너뛰기.
     /// </para>
     /// </summary>
     public class MessageSceneController : MonoBehaviour
     {
         #region Serialized Fields
 
-        // 수화기 확인 화면 루트(CheckScreen)와 다음 버튼. 씬을 어떤 상태로 저장했든 시작 시 이 화면부터 보인다.
+        // 수화기 확인 화면 루트(CheckScreen). 씬을 어떤 상태로 저장했든 시작 시 이 화면부터 보인다.
         [SerializeField] private GameObject _checkScreen;
-        [SerializeField] private Button _checkNextButton;
         // 입력 화면 루트(MessageScreen).
         [SerializeField] private GameObject _inputScreen;
         [SerializeField] private MessageInputView _inputView;
@@ -56,9 +57,11 @@ namespace Message
         private MessageSender _messageSender;
         private ExperienceSession _session;
         private IPublisher<MoveIdleEvent> _moveIdlePublisher;
+        private InactivityTimerGate _inactivityGate;
         private IDisposable _subscriptions;
-        private IDisposable _checkSubscriptions;
+        private IDisposable _checkSubscription;
         private MessageSettings _settings = new MessageSettings();
+        private bool _isInputShown;
         private bool _isSubmitted;
         private bool _isReturning;
 
@@ -71,13 +74,14 @@ namespace Message
         /// </summary>
         [Inject]
         public void Construct(ILogger<MessageSceneController> logger, IReceiverInput receiverInput, MessageSender messageSender, ExperienceSession session,
-            IPublisher<MoveIdleEvent> moveIdlePublisher)
+            IPublisher<MoveIdleEvent> moveIdlePublisher, InactivityTimerGate inactivityGate)
         {
             _logger = logger;
             _receiverInput = receiverInput;
             _messageSender = messageSender;
             _session = session;
             _moveIdlePublisher = moveIdlePublisher;
+            _inactivityGate = inactivityGate;
         }
 
         private void Start()
@@ -100,8 +104,8 @@ namespace Message
         /// </summary>
         private void OnDestroy()
         {
-            _checkSubscriptions?.Dispose();
-            _checkSubscriptions = null;
+            _checkSubscription?.Dispose();
+            _checkSubscription = null;
             _subscriptions?.Dispose();
             _subscriptions = null;
         }
@@ -128,45 +132,36 @@ namespace Message
         }
 
         /// <summary>
-        /// Next 버튼 클릭과 수화기 상태를 구독함. 수화기가 들려 있는 동안은 버튼을 누를 수 없다.
+        /// 수화기 상태를 구독함. 수화기가 걸리면 바로 입력 화면으로 넘어간다.
         /// </summary>
         private void BindCheckScreen()
         {
-            if (!_checkNextButton)
-            {
-                Debug.LogError("[MessageSceneController] Check screen Next button is not assigned.");
-                return;
-            }
+            if (_receiverInput == null) return;
 
-            DisposableBuilder builder = new DisposableBuilder();
-
-            _checkNextButton.OnClickAsObservable()
-                .Subscribe(this, static (_, self) => self.OnCheckNextClicked())
-                .AddTo(ref builder);
-
-            if (_receiverInput != null)
-            {
-                // ReactiveProperty는 구독 즉시 현재 값을 보내므로 시작 상태도 함께 반영된다.
-                _receiverInput.IsLifted
-                    .Subscribe(this, static (isLifted, self) => self._checkNextButton.interactable = !isLifted)
-                    .AddTo(ref builder);
-            }
-
-            _checkSubscriptions = builder.Build();
+            // ReactiveProperty는 구독 즉시 현재 값을 보내므로 이미 걸려 있으면 바로 넘어간다.
+            _checkSubscription = _receiverInput.IsLifted
+                .Subscribe(this, static (isLifted, self) =>
+                {
+                    if (!isLifted) self.ShowInputScreen();
+                });
         }
 
         /// <summary>
-        /// 수화기가 걸려 있으면 입력 화면으로 넘어감. 버튼이 잠겨 있어도 한 번 더 확인한다.
+        /// 수화기가 걸려 입력 화면으로 넘어감. 한 번만 넘어가고 이후 수화기 상태는 보지 않는다.
         /// </summary>
-        private void OnCheckNextClicked()
+        private void ShowInputScreen()
         {
-            if (_receiverInput != null && _receiverInput.IsLifted.CurrentValue) return;
+            if (_isInputShown) return;
+            _isInputShown = true;
 
             if (_logger != null) _logger.ZLogInformation($"[MessageSceneController] Receiver is hung up. Moving to message input.");
 
             if (_checkScreen) _checkScreen.SetActive(false);
             if (_inputScreen) _inputScreen.SetActive(true);
             if (_inputView) _inputView.ResetInput();
+
+            // 이 씬에는 TTS가 없다. 키보드 입력이 들어올 때마다 템플릿 타이머가 처음부터 다시 센다.
+            if (_inactivityGate != null) _inactivityGate.OpenInput(null);
         }
 
         #endregion
@@ -237,6 +232,9 @@ namespace Message
             if (_isSubmitted) return;
             _isSubmitted = true;
 
+            // 로딩 영상이 끝나면 스스로 0_Idle로 가므로 그동안은 세지 않는다.
+            if (_inactivityGate != null) _inactivityGate.CloseInput();
+
             if (_logger != null) _logger.ZLogInformation($"[MessageSceneController] Message submitted (name {submission.Name.Length} chars, message {submission.Message.Length} chars).");
 
             // 전송은 루트 서비스가 로딩 영상과 상관없이 이어 간다(실패하면 저장 후 재전송). 화면 흐름은 결과를 기다리지 않는다.
@@ -251,7 +249,7 @@ namespace Message
 
             if (_loadingVideo)
             {
-                _loadingVideo.Play(_settings.loadingVideo);
+                _loadingVideo.Play(_settings.loadingVideo, _settings.loadingVideoPlayCount);
             }
             else
             {
@@ -260,35 +258,14 @@ namespace Message
         }
 
         /// <summary>
-        /// 로딩 영상이 끝나면 설정의 idleReturnDelaySeconds만큼 마지막 프레임을 보여 준 뒤 0_Idle로 감. 완료 문구 화면이 생기면 그 화면을 거친다.
+        /// 로딩 영상을 설정의 loadingVideoPlayCount번 다 재생하면 바로 0_Idle로 감. 완료 문구 화면이 생기면 그 화면을 거친다.
         /// </summary>
         private void OnLoadingVideoCompleted()
         {
             if (_isReturning) return;
             _isReturning = true;
 
-            ReturnToIdleAsync(this.GetCancellationTokenOnDestroy()).Forget();
-        }
-
-        /// <summary>
-        /// 대기 시간 뒤 0_Idle을 불러옴.
-        /// </summary>
-        private async UniTaskVoid ReturnToIdleAsync(CancellationToken cancellationToken)
-        {
-            float delay = Mathf.Max(0f, _settings.idleReturnDelaySeconds);
-            if (_logger != null) _logger.ZLogInformation($"[MessageSceneController] Loading video finished. Moving to {Constants.Scenes.Idle} in {delay:F1}s.");
-
-            try
-            {
-                if (delay > 0f)
-                {
-                    await UniTask.Delay(TimeSpan.FromSeconds(delay), DelayType.UnscaledDeltaTime, PlayerLoopTiming.Update, cancellationToken);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
+            if (_logger != null) _logger.ZLogInformation($"[MessageSceneController] Loading video finished. Moving to {Constants.Scenes.Idle}.");
 
             // 체험을 끝까지 마치고 대기로 돌아가는 경로라 move_idle 로그를 보낸다.
             if (_moveIdlePublisher != null) _moveIdlePublisher.Publish(new MoveIdleEvent());

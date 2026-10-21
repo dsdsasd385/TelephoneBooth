@@ -88,6 +88,7 @@ namespace Mission
         private int _currentIndex = -1;
 
         private ProjectInputActions _inputActions;
+        private InactivityTimerGate _inactivityGate;
         private Action<InputAction.CallbackContext> _onNextScreenKey;
         private Action<InputAction.CallbackContext> _onPreviousScreenKey;
 
@@ -115,17 +116,19 @@ namespace Mission
         #region Dependency Injection & Unity Lifecycle
 
         /// <summary>
-        /// VContainer 의존성 주입으로 로거, 수화기 입력, 대기 화면 복귀 이벤트 발행자, 체험 세션, 입력 액션을 할당함.
+        /// VContainer 의존성 주입으로 로거, 수화기 입력, 대기 화면 복귀 이벤트 발행자, 체험 세션, 입력 액션, 무입력 타이머 제어를 할당함.
         /// </summary>
         [Inject]
         public void Construct(ILogger<Mission2SceneController> logger, IReceiverInput receiverInput,
-            IPublisher<MoveIdleEvent> moveIdlePublisher, ExperienceSession session, ProjectInputActions inputActions)
+            IPublisher<MoveIdleEvent> moveIdlePublisher, ExperienceSession session, ProjectInputActions inputActions,
+            InactivityTimerGate inactivityGate)
         {
             _logger = logger;
             _receiverInput = receiverInput;
             _moveIdlePublisher = moveIdlePublisher;
             _session = session;
             _inputActions = inputActions;
+            _inactivityGate = inactivityGate;
         }
 
         /// <summary>
@@ -381,6 +384,7 @@ namespace Mission
         {
             CancelFlow();
             CancelFeedback();
+            if (_inactivityGate != null) _inactivityGate.CloseInput();
             if (_mediaPlayer) _mediaPlayer.PlayClip(null);
             if (_end) _end.Hide();
 
@@ -468,7 +472,7 @@ namespace Mission
         }
 
         /// <summary>
-        /// 보고서 화면을 처음 상태(무작위 보고서)로 띄우고 안내 TTS를 재생함.
+        /// 보고서 화면을 처음 상태(무작위 보고서)로 띄우고 안내 TTS를 재생함. 무입력 타이머는 안내 TTS가 끝난 뒤부터 센다.
         /// </summary>
         private void ShowQuiz()
         {
@@ -478,6 +482,7 @@ namespace Mission
             ShowRoot(_quiz.gameObject);
             _currentIndex = QuizPageIndex;
             _mediaPlayer.PlayClip(_quizIntroClip);
+            if (_inactivityGate != null) _inactivityGate.OpenInput(_mediaPlayer);
         }
 
         /// <summary>
@@ -527,18 +532,20 @@ namespace Mission
             _currentIndex = EndPageIndex;
 
             CancelFlow();
+            if (_inactivityGate != null) _inactivityGate.CloseInput();
             _flowCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
             RunEndAsync(_flowCts).Forget();
         }
 
         /// <summary>
-        /// 마무리 선택 화면 버튼 페이드인. 취소되면 그 상태에 둔다.
+        /// 마무리 선택 화면 버튼 페이드인. 페이드가 끝나 누를 수 있게 되면 무입력 타이머를 센다. 취소되면 그 상태에 둔다.
         /// </summary>
         private async UniTaskVoid RunEndAsync(CancellationTokenSource cts)
         {
             try
             {
                 await _end.ShowEndSelectAsync(cts.Token);
+                if (_inactivityGate != null) _inactivityGate.OpenInput(_mediaPlayer);
             }
             catch (OperationCanceledException)
             {
@@ -604,6 +611,8 @@ namespace Mission
 
             if (isCorrect)
             {
+                // 정답 연출 동안은 누를 버튼이 없다. 마무리 선택 화면 버튼이 나오면 다시 센다.
+                if (_inactivityGate != null) _inactivityGate.CloseInput();
                 _mediaPlayer.PlayClip(null);
                 RunCorrectAsync(_feedbackCts).Forget();
             }

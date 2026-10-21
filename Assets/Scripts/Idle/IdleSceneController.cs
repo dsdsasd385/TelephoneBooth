@@ -40,10 +40,15 @@ namespace Idle
     /// <para>
     /// 수화기 규칙(작업계획서 4.3): ① 대기에서 들면 ② 안내로 가고, ②–⑤에서 내려놓으면
     /// MoveIdleEvent를 발행하고 ① 대기로 즉시 돌아간다. 나이 선택 화면은 삭제했다.
+    /// ①에 들어올 때 수화기가 이미 들려 있으면(무입력 타임아웃·⑤ 홈) 수화기 확인 화면을 띄우고 ① TTS를 끊는다.
+    /// 내려놓으면 확인 화면을 끄고 ①을 처음부터(TTS 포함) 다시 보여 준다.
+    /// </para>
+    /// <para>
+    /// 무입력 타이머(5.1): 버튼이 페이드인되어 누를 수 있게 되면 InactivityTimerGate를 열고, 화면을 바꿀 때 닫는다.
     /// </para>
     /// <para>
     /// 페이지 규칙(작업계획서 5·6장): 화면에 들어가면 버튼을 숨기고, TTS가 끝나면 페이드인한 뒤에야 누를 수 있다.
-    /// 버튼이 없는 ④는 TTS가 끝나고 _autoAdvanceDelaySeconds만큼 기다린 뒤 ⑤로 자동 진행한다.
+    /// ④도 TTS가 끝나면 다음 버튼을 페이드인하고, 누르지 않아도 _autoAdvanceDelaySeconds만큼 기다린 뒤 ⑤로 자동 진행한다.
     /// ⑤는 미션을 ExperienceSession에 기록하고 그 미션 씬으로 이동하며, 홈 버튼은 ① 대기로 돌아간다.
     /// </para>
     /// <para>
@@ -70,7 +75,7 @@ namespace Idle
         // ④의 TTS가 끝난 뒤 ⑤로 자동 진행하기 전에 기다리는 시간(초). 0이면 바로 넘어간다.
         [SerializeField, Min(0f)] private float _autoAdvanceDelaySeconds = 1.5f;
 
-        [Header("②·③ 다음")]
+        [Header("②·③·④ 다음")]
         [SerializeField] private Button[] _nextButtons = Array.Empty<Button>();
 
         [Header("⑤ 미션 선택")]
@@ -78,6 +83,11 @@ namespace Idle
         [SerializeField, FormerlySerializedAs("_truthButton")] private Button _mission2Button;
         [SerializeField, FormerlySerializedAs("_nationButton")] private Button _mission3Button;
         [SerializeField] private Button _homeButton;
+
+        [Header("① 수화기 확인")]
+        // "수화기를 내려놓아 주세요" 화면. ①에 들어올 때 수화기가 들려 있으면(무입력 타임아웃·⑤ 홈) 켜고, 내려놓으면 끈다.
+        // ① 화면을 덮어야 하므로 Canvas에서 화면들보다 아래(나중)에 둔다.
+        [SerializeField] private GameObject _checkScreen;
 
         #endregion
 
@@ -88,6 +98,7 @@ namespace Idle
         private IPublisher<MoveIdleEvent> _moveIdlePublisher;
         private ExperienceSession _session;
         private ProjectInputActions _inputActions;
+        private InactivityTimerGate _inactivityGate;
         private Action<InputAction.CallbackContext> _onToggleDoubleBuffering;
         private Action<InputAction.CallbackContext> _onNextScreenKey;
         private Action<InputAction.CallbackContext> _onPreviousScreenKey;
@@ -96,6 +107,8 @@ namespace Idle
         private CancellationTokenSource _screenCts;
         private Func<bool> _isTtsFinished;
         private bool _isInitialized;
+        // 요청한 화면에서 수화기 확인 화면을 띄울지. 켜기는 바로, 끄기는 새 화면 첫 프레임(OnPageShown)에 한다.
+        private bool _isCheckScreenRequested;
         private int _currentIndex = -1;
         private int _visibleIndex = -1;
 
@@ -117,17 +130,19 @@ namespace Idle
         #region Dependency Injection & Unity Lifecycle
 
         /// <summary>
-        /// VContainer 의존성 주입으로 로거, 수화기 입력, 대기 화면 복귀 이벤트 발행자, 체험 세션, 입력 액션을 할당함.
+        /// VContainer 의존성 주입으로 로거, 수화기 입력, 대기 화면 복귀 이벤트 발행자, 체험 세션, 입력 액션, 무입력 타이머 제어를 할당함.
         /// </summary>
         [Inject]
         public void Construct(ILogger<IdleSceneController> logger, IReceiverInput receiverInput,
-            IPublisher<MoveIdleEvent> moveIdlePublisher, ExperienceSession session, ProjectInputActions inputActions)
+            IPublisher<MoveIdleEvent> moveIdlePublisher, ExperienceSession session, ProjectInputActions inputActions,
+            InactivityTimerGate inactivityGate)
         {
             _logger = logger;
             _receiverInput = receiverInput;
             _moveIdlePublisher = moveIdlePublisher;
             _session = session;
             _inputActions = inputActions;
+            _inactivityGate = inactivityGate;
         }
 
         /// <summary>
@@ -142,6 +157,7 @@ namespace Idle
 
             _isTtsFinished = IsTtsFinished;
             HideAllScreens();
+            SetCheckScreenActive(false);
             BindButtons();
 
             if (_receiverInput != null)
@@ -217,11 +233,6 @@ namespace Idle
             }
 
             ShowScreen(WaitingScreenIndex);
-
-            if (_receiverInput != null && _receiverInput.IsLifted.CurrentValue && _logger != null)
-            {
-                _logger.ZLogWarning($"[IdleSceneController] Receiver is already lifted on waiting screen. Hang up first (put-down guide UI is not implemented yet).");
-            }
         }
 
         /// <summary>
@@ -361,10 +372,19 @@ namespace Idle
 
         /// <summary>
         /// ②–⑤에서 수화기를 내려놓으면 대기 화면 복귀 이벤트를 발행하고 ① 대기로 즉시 돌아감.
+        /// ①의 수화기 확인 화면에서 내려놓으면 확인 화면을 끄고 ①을 다시 시작한다.
         /// </summary>
         private void OnReceiverHungUp()
         {
-            if (_currentIndex == WaitingScreenIndex) return;
+            if (_currentIndex == WaitingScreenIndex)
+            {
+                if (!IsCheckScreenShown) return;
+
+                // 확인 화면 동안 끊었던 ① TTS를 들려주도록 ①을 처음부터 다시 보여 준다. 수화기가 걸려 있어 확인 화면은 꺼진다.
+                if (_logger != null) _logger.ZLogInformation($"[IdleSceneController] Receiver hung up on check screen. Restarting waiting screen.");
+                ShowScreen(WaitingScreenIndex);
+                return;
+            }
 
             if (_logger != null) _logger.ZLogInformation($"[IdleSceneController] Receiver hung up on screen {_currentIndex}. Returning to waiting screen.");
             if (_moveIdlePublisher != null) _moveIdlePublisher.Publish(new MoveIdleEvent());
@@ -435,7 +455,7 @@ namespace Idle
         }
 
         /// <summary>
-        /// ②·③의 다음 버튼으로 다음 화면으로 감.
+        /// ②·③·④의 다음 버튼으로 다음 화면으로 감.
         /// </summary>
         private void OnNextClicked()
         {
@@ -505,6 +525,7 @@ namespace Idle
             }
 
             CancelScreenFlow();
+            if (_inactivityGate != null) _inactivityGate.CloseInput();
 
             // 교체 전까지 이전 화면이 보이므로 그 버튼이 눌리지 않게 먼저 잠근다.
             if (_visibleIndex >= 0) SetButtonsInteractable(_visibleIndex, false);
@@ -512,6 +533,15 @@ namespace Idle
             if (index == WaitingScreenIndex && _session != null)
             {
                 _session.Reset();
+            }
+
+            // ①에 들어올 때 수화기가 이미 들려 있으면 먼저 내려놓게 한다. 들기는 내려놓은 뒤에만 ②로 이어진다.
+            // 끌 때는 새 영상이 준비되는 동안 확인 화면이 덮고 있게 두어 깜빡이지 않게 한다(OnPageShown에서 끈다).
+            _isCheckScreenRequested = index == WaitingScreenIndex && _receiverInput != null && _receiverInput.IsLifted.CurrentValue;
+            if (_isCheckScreenRequested)
+            {
+                if (_logger != null) _logger.ZLogInformation($"[IdleSceneController] Receiver is already lifted on waiting screen. Showing check screen.");
+                SetCheckScreenActive(true);
             }
 
             _currentIndex = index;
@@ -535,19 +565,25 @@ namespace Idle
             SetScreenActive(pageIndex, true);
             _visibleIndex = pageIndex;
 
+            // 재생기는 첫 프레임과 함께 ① TTS를 시작한다. 확인 화면이 덮고 있으면 같은 프레임에 끊어 소리가 나지 않게 한다(영상은 계속).
+            // 확인 화면을 끄는 요청이었다면 새 화면이 보이는 이 프레임에 끈다.
+            if (_isCheckScreenRequested) _mediaPlayer.PlayClip(null);
+            else SetCheckScreenActive(false);
+
             CancelScreenFlow();
             _screenCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
             RunScreenFlowAsync(pageIndex, _screenCts).Forget();
         }
 
         /// <summary>
-        /// TTS가 끝나기를 기다렸다가 버튼을 페이드인하거나, ④라면 다음 화면으로 넘어감.
+        /// TTS가 끝나기를 기다렸다가 버튼을 페이드인함. ④라면 그 뒤 _autoAdvanceDelaySeconds만큼 기다려 다음 화면으로 넘어감.
         /// </summary>
         private async UniTaskVoid RunScreenFlowAsync(int index, CancellationTokenSource cts)
         {
             try
             {
                 await UniTask.WaitUntil(_isTtsFinished, PlayerLoopTiming.Update, cts.Token);
+                await FadeInButtonsAsync(index, cts.Token);
 
                 if (index == AutoAdvanceScreenIndex)
                 {
@@ -558,10 +594,7 @@ namespace Idle
                     }
 
                     ShowScreen(index + 1);
-                    return;
                 }
-
-                await FadeInButtonsAsync(index, cts.Token);
             }
             catch (OperationCanceledException)
             {
@@ -627,12 +660,32 @@ namespace Idle
             }
         }
 
+        /// <summary>
+        /// 수화기 확인 화면이 켜져 있는지 여부.
+        /// </summary>
+        private bool IsCheckScreenShown => _checkScreen && _checkScreen.activeSelf;
+
+        /// <summary>
+        /// 수화기 확인 화면을 켜거나 끔.
+        /// </summary>
+        private void SetCheckScreenActive(bool isActive)
+        {
+            if (_checkScreen)
+            {
+                _checkScreen.SetActive(isActive);
+            }
+            else if (isActive && _logger != null)
+            {
+                _logger.ZLogWarning($"[IdleSceneController] Check screen is not assigned. Hang up first.");
+            }
+        }
+
         #endregion
 
         #region Button Visibility
 
         /// <summary>
-        /// 화면의 버튼을 페이드인한 뒤 누를 수 있게 함.
+        /// 화면의 버튼을 페이드인한 뒤 누를 수 있게 하고 무입력 타이머를 처음부터 셈. 버튼이 없는 화면(①)은 타이머를 켜지 않는다.
         /// </summary>
         private async UniTask FadeInButtonsAsync(int index, CancellationToken cancellationToken)
         {
@@ -650,6 +703,7 @@ namespace Idle
 
             await UniTask.WhenAll(fades);
             SetButtonsInteractable(index, true);
+            if (_inactivityGate != null) _inactivityGate.OpenInput(_mediaPlayer);
         }
 
         /// <summary>
