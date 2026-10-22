@@ -48,7 +48,7 @@ namespace Idle
     /// </para>
     /// <para>
     /// 페이지 규칙(작업계획서 5·6장): 화면에 들어가면 버튼을 숨기고, TTS가 끝나면 페이드인한 뒤에야 누를 수 있다.
-    /// ④도 TTS가 끝나면 다음 버튼을 페이드인하고, 누르지 않아도 _autoAdvanceDelaySeconds만큼 기다린 뒤 ⑤로 자동 진행한다.
+    /// ④도 ②·③과 같이 다음 버튼을 눌러야 ⑤로 넘어간다.
     /// ⑤는 미션을 ExperienceSession에 기록하고 그 미션 씬으로 이동하며, 홈 버튼은 ① 대기로 돌아간다.
     /// </para>
     /// <para>
@@ -63,7 +63,6 @@ namespace Idle
 
         private const int WaitingScreenIndex = 0;
         private const int FirstGuideScreenIndex = 1;
-        private const int AutoAdvanceScreenIndex = 3;
 
         #endregion
 
@@ -72,8 +71,6 @@ namespace Idle
         [SerializeField] private PageMediaPlayer _mediaPlayer;
         [SerializeField] private IdleScreenView[] _screens = Array.Empty<IdleScreenView>();
         [SerializeField] private float _buttonFadeSeconds = 0.5f;
-        // ④의 TTS가 끝난 뒤 ⑤로 자동 진행하기 전에 기다리는 시간(초). 0이면 바로 넘어간다.
-        [SerializeField, Min(0f)] private float _autoAdvanceDelaySeconds = 1.5f;
 
         [Header("②·③·④ 다음")]
         [SerializeField] private Button[] _nextButtons = Array.Empty<Button>();
@@ -576,7 +573,7 @@ namespace Idle
         }
 
         /// <summary>
-        /// TTS가 끝나기를 기다렸다가 버튼을 페이드인함. ④라면 그 뒤 _autoAdvanceDelaySeconds만큼 기다려 다음 화면으로 넘어감.
+        /// TTS가 끝나기를 기다렸다가 버튼을 페이드인함.
         /// </summary>
         private async UniTaskVoid RunScreenFlowAsync(int index, CancellationTokenSource cts)
         {
@@ -584,17 +581,6 @@ namespace Idle
             {
                 await UniTask.WaitUntil(_isTtsFinished, PlayerLoopTiming.Update, cts.Token);
                 await FadeInButtonsAsync(index, cts.Token);
-
-                if (index == AutoAdvanceScreenIndex)
-                {
-                    // 화면 전환·오브젝트 파괴로 취소되면 넘어가지 않는다. timeScale과 무관하게 실제 시간으로 기다린다.
-                    if (_autoAdvanceDelaySeconds > 0f)
-                    {
-                        await UniTask.Delay(TimeSpan.FromSeconds(_autoAdvanceDelaySeconds), DelayType.UnscaledDeltaTime, PlayerLoopTiming.Update, cts.Token);
-                    }
-
-                    ShowScreen(index + 1);
-                }
             }
             catch (OperationCanceledException)
             {

@@ -707,7 +707,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &461017278
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1124,7 +1124,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: c516acfcde504c740b3b5282852d9157, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 064f4a074725b314eae30ff382cde42f, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -2029,7 +2029,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1064641558
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2080,18 +2080,22 @@ MonoBehaviour:
   _choicesGroup: {fileID: 1381028778}
   _answers:
   - button: {fileID: 1740344395}
+    select: {fileID: 21300000, guid: 645091a6b4c596d40a70d5df3fc9da73, type: 3}
     report: {fileID: 21300000, guid: 7585a541781e74c4bba3701b26977227, type: 3}
     result: {fileID: 21300000, guid: 7075d587bed041745bd8336d0a06335e, type: 3}
     stemp: {fileID: 21300000, guid: 99f787b4bd031c14da3f9f2462d1b279, type: 3}
   - button: {fileID: 1622282231}
+    select: {fileID: 21300000, guid: 079e25c34da55bd4fa68f2a1f66e2c22, type: 3}
     report: {fileID: 21300000, guid: 0f67edbde8b90a043b2ce219be37f754, type: 3}
     result: {fileID: 21300000, guid: e47b7439af59d014eb9810a3e88f8502, type: 3}
     stemp: {fileID: 21300000, guid: 894e0556355206f47975583fa3e1604f, type: 3}
   - button: {fileID: 2001440572}
+    select: {fileID: 21300000, guid: fda661d7202264f4aa20dc2b20c6f570, type: 3}
     report: {fileID: 21300000, guid: 24f9d5cf190096b48af092486428d375, type: 3}
     result: {fileID: 21300000, guid: 61e340888236fc444ac65fe9371b6331, type: 3}
     stemp: {fileID: 21300000, guid: c8ce4f96b77d7b44cbaeb206888e7ae4, type: 3}
   - button: {fileID: 490953133}
+    select: {fileID: 21300000, guid: 737b0e761d7eba945bb580a2ef8dec7a, type: 3}
     report: {fileID: 21300000, guid: 7fc1eeafd96207f4aa32b094e64815d6, type: 3}
     result: {fileID: 21300000, guid: 3f2031718596ed942b350c3a83f4b4ec, type: 3}
     stemp: {fileID: 21300000, guid: ede1c95bfcb07984485a1ff8e747c2f9, type: 3}

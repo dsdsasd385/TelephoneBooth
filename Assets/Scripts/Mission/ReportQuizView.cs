@@ -12,11 +12,13 @@ namespace Mission
     /// <summary>
     /// 보고서 문제 하나. 사진 버튼과, 그 사진이 정답인 보고서 Sprite, 그 사진을 넣은 완성 보고서(XXX_Result, 650×706) Sprite,
     /// 확대한 뒤 도장을 찍을 완성 보고서(XXX_Stemp, 1000×902) Sprite. stemp가 비어 있으면 result를 계속 쓴다.
+    /// select는 그 사진 버튼을 눌렀을 때 버튼에 띄울 Sprite(XXX_Select). 비어 있으면 버튼 모양을 바꾸지 않는다.
     /// </summary>
     [Serializable]
     public struct ReportAnswer
     {
         public Button button;
+        public Sprite select;
         public Sprite report;
         public Sprite result;
         public Sprite stemp;
@@ -26,6 +28,7 @@ namespace Mission
     /// 미션2 화면 3(보고서 완성). 들어올 때마다 보고서 5종 중 하나를 골라 ReportImage에 띄운다.
     /// <para>
     /// 사진 버튼(Btns)을 누르면 정답·오답과 관계없이 ReportImage를 그 사진의 XXX_Result로 바꾸고(빈 칸은 숨김) Submitted로 정답 여부를 알린다.
+    /// 누른 버튼은 XXX_Select Sprite로 바뀌고, 다른 버튼을 누르거나 보고서를 되돌리면 원래 Sprite로 돌아간다.
     /// 오답 문구·TTS 대기는 씬 매니저가 ShowFailTitle/ShowDefaultTitle로 처리하고, TTS가 끝나면 RestoreReport로 원래 보고서·빈 칸으로 되돌린다.
     /// 정답 연출(PlayCorrectAsync): TitleImage·Btns 페이드아웃 →
     /// _moveDelaySeconds 뒤 XXX_Stemp로 교체하며 ReportImage 이동·크기 변경 → StempImage 도장 찍기.
@@ -88,6 +91,8 @@ namespace Mission
         private readonly Subject<bool> _submitted = new Subject<bool>();
         private IDisposable _subscriptions;
         private Sprite _defaultTitleSprite;
+        // 사진 버튼마다 씬에 넣어 둔 원래 Sprite. 선택이 풀리면 이것으로 되돌린다.
+        private Sprite[] _defaultButtonSprites = Array.Empty<Sprite>();
         private Sprite _emptySlotSprite;
         private Color _emptySlotColor;
         private RectTransform _reportRect;
@@ -176,7 +181,7 @@ namespace Mission
 
             _isLocked = false;
             _isBlocked = false;
-            _selectedIndex = -1;
+            SetSelectedButton(-1);
             _reportIndex = _answers.Length > 0 ? Random.Range(0, _answers.Length) : -1;
 
             ShowDefaultTitle();
@@ -232,7 +237,7 @@ namespace Mission
         public void RestoreReport()
         {
             CacheDefaults();
-            _selectedIndex = -1;
+            SetSelectedButton(-1);
 
             if (_reportImage && _reportIndex >= 0 && _answers[_reportIndex].report)
             {
@@ -333,10 +338,32 @@ namespace Mission
         {
             if (_isLocked || _isBlocked) return;
 
-            _selectedIndex = index;
+            SetSelectedButton(index);
             HideSlot();
             SwapToResult();
             _submitted.OnNext(index == _reportIndex);
+        }
+
+        /// <summary>
+        /// 고른 사진을 바꿈. 이전에 고른 버튼은 원래 Sprite로, 새로 고른 버튼은 XXX_Select로 바꾼다. -1이면 선택을 모두 푼다.
+        /// </summary>
+        private void SetSelectedButton(int index)
+        {
+            if (_selectedIndex >= 0 && _selectedIndex != index) SetButtonSprite(_selectedIndex, _defaultButtonSprites[_selectedIndex]);
+            if (index >= 0 && _answers[index].select) SetButtonSprite(index, _answers[index].select);
+
+            _selectedIndex = index;
+        }
+
+        /// <summary>
+        /// 사진 버튼의 Image Sprite를 바꿈. 버튼이나 Sprite가 비어 있으면 그대로 둔다.
+        /// </summary>
+        private void SetButtonSprite(int index, Sprite sprite)
+        {
+            Button button = _answers[index].button;
+            if (!button || !button.image || !sprite) return;
+
+            button.image.sprite = sprite;
         }
 
         /// <summary>
@@ -473,6 +500,14 @@ namespace Mission
             _onBeginStempFade = BeginStempFade;
             _onCommitCrossfade = CommitCrossfade;
             if (_titleImage) _defaultTitleSprite = _titleImage.sprite;
+
+            _defaultButtonSprites = new Sprite[_answers.Length];
+            for (int i = 0; i < _answers.Length; i++)
+            {
+                Button button = _answers[i].button;
+                if (button && button.image) _defaultButtonSprites[i] = button.image.sprite;
+            }
+
             if (_slotImage)
             {
                 _emptySlotSprite = _slotImage.sprite;
