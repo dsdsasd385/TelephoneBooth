@@ -5,7 +5,7 @@ namespace Data
     /// <summary>
     /// 미션2(진실수호) 콘텐츠를 적은 StreamingAssets JSON의 최상위 구조.
     /// screens 순서는 씬 매니저의 대사 화면 순서와 같다. 보고서 화면의 quizIntroTts는 들어갈 때, quizFailTts는 오답일 때의 TTS,
-    /// stampSfx는 정답 연출에서 도장이 찍힐 때의 효과음이다. 비어 있으면 재생하지 않는다.
+    /// stampSfx는 정답 연출에서 도장이 찍힐 때의 효과음, endTts는 마무리 선택 화면(EndSelectScreen)의 TTS다. 비어 있으면 재생하지 않는다.
     /// </summary>
     [Serializable]
     public class Mission2ContentTable
@@ -14,6 +14,7 @@ namespace Data
         public string quizIntroTts = "";
         public string quizFailTts = "";
         public string stampSfx = "";
+        public string endTts = "";
     }
 
     /// <summary>

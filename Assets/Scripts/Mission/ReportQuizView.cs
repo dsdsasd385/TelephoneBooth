@@ -23,12 +23,11 @@ namespace Mission
     }
 
     /// <summary>
-    /// 미션2 화면 3(보고서 완성). 들어올 때마다 보고서 5종 중 하나를 골라 ReportImage에 띄우고,
-    /// 사진 버튼을 고르면 ReportImage의 빈 칸(ChangeImage)에 그 사진을 넣고, 그때까지 숨겨 둔 선택 완료 버튼을 보여 준다.
-    /// 빈 칸은 크기를 유지한 채 Sprite만 바꾼다.
+    /// 미션2 화면 3(보고서 완성). 들어올 때마다 보고서 5종 중 하나를 골라 ReportImage에 띄운다.
     /// <para>
-    /// 선택 완료를 누르면 Submitted로 정답 여부를 알린다. 오답 문구·TTS 대기는 씬 매니저가 ShowFailTitle/ShowDefaultTitle로 처리한다.
-    /// 정답 연출(PlayCorrectAsync): ReportImage를 고른 사진의 XXX_Result로 교체(빈 칸·선택 완료는 숨김)하고 TitleImage·Btns 페이드아웃 →
+    /// 사진 버튼(Btns)을 누르면 정답·오답과 관계없이 ReportImage를 그 사진의 XXX_Result로 바꾸고(빈 칸은 숨김) Submitted로 정답 여부를 알린다.
+    /// 오답 문구·TTS 대기는 씬 매니저가 ShowFailTitle/ShowDefaultTitle로 처리하고, TTS가 끝나면 RestoreReport로 원래 보고서·빈 칸으로 되돌린다.
+    /// 정답 연출(PlayCorrectAsync): TitleImage·Btns 페이드아웃 →
     /// _moveDelaySeconds 뒤 XXX_Stemp로 교체하며 ReportImage 이동·크기 변경 → StempImage 도장 찍기.
     /// Result 교체는 바로 하고, Stemp 교체는 이동·크기 변경 동안 크로스페이드 이미지(_crossfadeImage)로 겹쳐 페이드한다.
     /// </para>
@@ -56,7 +55,6 @@ namespace Mission
         [SerializeField] private CanvasGroup _reportGroup;
         // 고른 사진을 넣는 보고서의 빈 칸. 고르기 전에는 씬에 넣어 둔 Sprite·색(반투명 회색 칸)을 보여 준다.
         [SerializeField] private Image _slotImage;
-        [SerializeField] private Button _submitButton;
 
         [Header("정답 연출")]
         [SerializeField] private Vector2 _resultTargetPosition = new Vector2(491f, -118f);
@@ -112,7 +110,7 @@ namespace Mission
         #region Properties
 
         /// <summary>
-        /// 선택 완료를 누를 때마다 정답 여부를 발행함.
+        /// 사진 버튼을 누를 때마다 정답 여부를 발행함.
         /// </summary>
         public Observable<bool> Submitted => _submitted;
 
@@ -143,7 +141,7 @@ namespace Mission
         #region Public Methods
 
         /// <summary>
-        /// 사진·선택 완료 버튼 클릭을 구독함. 씬 매니저가 시작할 때 한 번 부른다.
+        /// 사진 버튼 클릭을 구독함. 씬 매니저가 시작할 때 한 번 부른다.
         /// </summary>
         public void Bind()
         {
@@ -163,17 +161,6 @@ namespace Mission
                 button.OnClickAsObservable()
                     .Subscribe(_ => OnChoiceClicked(index))
                     .AddTo(ref builder);
-            }
-
-            if (_submitButton)
-            {
-                _submitButton.OnClickAsObservable()
-                    .Subscribe(this, static (_, self) => self.OnSubmitClicked())
-                    .AddTo(ref builder);
-            }
-            else
-            {
-                Debug.LogError("[ReportQuizView] Submit button is not assigned.");
             }
 
             _subscriptions = builder.Build();
@@ -213,9 +200,6 @@ namespace Mission
                 _slotImage.gameObject.SetActive(true);
             }
 
-            // 선택 완료는 사진을 골라 빈 칸에 이미지가 들어갈 때 나타난다.
-            if (_submitButton) _submitButton.gameObject.SetActive(false);
-
             if (_stampImage)
             {
                 _stampImage.localScale = Vector3.one;
@@ -232,7 +216,7 @@ namespace Mission
         }
 
         /// <summary>
-        /// 사진·선택 완료 버튼 클릭만 막거나 다시 받음. 버튼이 비활성 색으로 바뀌지 않게 interactable은 건드리지 않는다.
+        /// 사진 버튼 클릭만 막거나 다시 받음. 버튼이 비활성 색으로 바뀌지 않게 interactable은 건드리지 않는다.
         /// 오답 TTS가 끝날 때까지 다시 고르지 못하게 할 때 쓴다.
         /// </summary>
         public void SetInputBlocked(bool isBlocked)
@@ -240,6 +224,27 @@ namespace Mission
             _isBlocked = isBlocked;
             if (_choicesGroup) _choicesGroup.blocksRaycasts = !isBlocked;
             if (_reportGroup) _reportGroup.blocksRaycasts = !isBlocked;
+        }
+
+        /// <summary>
+        /// ReportImage를 이번 보고서 원본으로, 빈 칸을 고르기 전 상태로 되돌림. 오답 TTS가 끝난 뒤 다시 고르게 할 때 쓴다.
+        /// </summary>
+        public void RestoreReport()
+        {
+            CacheDefaults();
+            _selectedIndex = -1;
+
+            if (_reportImage && _reportIndex >= 0 && _answers[_reportIndex].report)
+            {
+                _reportImage.sprite = _answers[_reportIndex].report;
+            }
+
+            if (_slotImage)
+            {
+                _slotImage.sprite = _emptySlotSprite;
+                _slotImage.color = _emptySlotColor;
+                _slotImage.gameObject.SetActive(true);
+            }
         }
 
         /// <summary>
@@ -262,7 +267,7 @@ namespace Mission
         }
 
         /// <summary>
-        /// 정답 연출. 입력을 잠그고 ReportImage를 고른 사진의 결과 이미지(XXX_Result)로 바로 바꾸고 TitleImage·Btns를 숨긴 뒤,
+        /// 정답 연출. 입력을 잠그고 TitleImage·Btns를 숨긴 뒤(ReportImage는 사진을 누를 때 이미 XXX_Result로 바뀌어 있다),
         /// _moveDelaySeconds 뒤 XXX_Stemp로 바꾸며 ReportImage를 목표 위치·크기로 옮기고 도장을 찍는다.
         /// </summary>
         public async UniTask PlayCorrectAsync(CancellationToken cancellationToken)
@@ -274,16 +279,13 @@ namespace Mission
             // Join·Append는 Sequence를 돌려주는데 DOTween Sequence가 awaitable이라 결과를 버리면 CS4014 경고가 나서 다시 받는다.
             Sequence sequence = DOTween.Sequence().SetUpdate(true);
 
-            // 1) 보고서 → 결과 이미지 바로 교체
             Sprite stemp = _selectedIndex >= 0 ? _answers[_selectedIndex].stemp : null;
-            HideSlotAndSubmit();
-            SwapToResult();
 
-            // 2) 문구·사진 버튼 페이드아웃(이동 전 대기 시간 동안)
+            // 1) 문구·사진 버튼 페이드아웃(이동 전 대기 시간 동안)
             if (_titleGroup) sequence = sequence.Join(_titleGroup.DOFade(0f, _hideSeconds));
             if (_choicesGroup) sequence = sequence.Join(_choicesGroup.DOFade(0f, _hideSeconds));
 
-            // 3) 대기 뒤 도장용 결과 이미지로 바꾸며 이동·크기 변경. 크로스페이드 이미지가 있으면 이동하는 동안 겹쳐 페이드한다.
+            // 2) 대기 뒤 도장용 결과 이미지로 바꾸며 이동·크기 변경. 크로스페이드 이미지가 있으면 이동하는 동안 겹쳐 페이드한다.
             // (두 이미지의 가로세로 비율이 달라 바로 바꾸면 내용이 튀어 보인다)
             if (_crossfadeImage && _reportImage && stemp && _resultMoveSeconds > 0f)
             {
@@ -304,7 +306,7 @@ namespace Mission
                     .Insert(_moveDelaySeconds, _reportRect.DOSizeDelta(_resultTargetSize, _resultMoveSeconds).SetEase(_resultMoveEase));
             }
 
-            // 4) 도장: 크게 떠 있다가 내려찍히고 살짝 튄다.
+            // 3) 도장: 크게 떠 있다가 내려찍히고 살짝 튄다.
             if (_stampImage)
             {
                 sequence = sequence
@@ -325,39 +327,20 @@ namespace Mission
         #region Private Methods
 
         /// <summary>
-        /// 사진을 고르면 빈 칸의 크기는 그대로 두고 Sprite만 그 사진으로 바꾼 뒤(반투명 색은 걷어 냄) 선택 완료 버튼을 보이게 함.
+        /// 사진을 누르면 정답·오답과 관계없이 ReportImage를 그 사진의 결과 이미지로 바꾸고 정답 여부를 발행함.
         /// </summary>
         private void OnChoiceClicked(int index)
         {
             if (_isLocked || _isBlocked) return;
 
             _selectedIndex = index;
-            Image buttonImage = _answers[index].button ? _answers[index].button.image : null;
-            if (_slotImage && buttonImage)
-            {
-                _slotImage.sprite = buttonImage.sprite;
-                _slotImage.color = Color.white;
-            }
-
-            if (_submitButton)
-            {
-                _submitButton.interactable = true;
-                _submitButton.gameObject.SetActive(true);
-            }
+            HideSlot();
+            SwapToResult();
+            _submitted.OnNext(index == _reportIndex);
         }
 
         /// <summary>
-        /// 고른 사진이 지금 보고서의 정답인지 발행함. 사진을 고르지 않았으면 무시한다.
-        /// </summary>
-        private void OnSubmitClicked()
-        {
-            if (_isLocked || _isBlocked || _selectedIndex < 0) return;
-
-            _submitted.OnNext(_selectedIndex == _reportIndex);
-        }
-
-        /// <summary>
-        /// ReportImage를 고른 사진의 결과 이미지(XXX_Result)로 바꾸고, 결과 이미지에 이미 사진이 있어 빈 칸·선택 완료를 숨김.
+        /// ReportImage를 고른 사진의 결과 이미지(XXX_Result)로 바꿈.
         /// </summary>
         private void SwapToResult()
         {
@@ -368,12 +351,11 @@ namespace Mission
         }
 
         /// <summary>
-        /// 빈 칸과 선택 완료 버튼을 숨김(완성 보고서에는 사진이 이미 들어 있다).
+        /// 빈 칸을 숨김(결과 이미지에는 사진이 이미 들어 있다).
         /// </summary>
-        private void HideSlotAndSubmit()
+        private void HideSlot()
         {
             if (_slotImage) _slotImage.gameObject.SetActive(false);
-            if (_submitButton) _submitButton.gameObject.SetActive(false);
         }
 
         /// <summary>
@@ -426,7 +408,7 @@ namespace Mission
         }
 
         /// <summary>
-        /// 사진·선택 완료 버튼을 누를 수 없게 함.
+        /// 사진 버튼을 누를 수 없게 함.
         /// </summary>
         private void Lock()
         {
@@ -436,8 +418,6 @@ namespace Mission
                 _choicesGroup.interactable = false;
                 _choicesGroup.blocksRaycasts = false;
             }
-
-            if (_submitButton) _submitButton.interactable = false;
         }
 
         /// <summary>

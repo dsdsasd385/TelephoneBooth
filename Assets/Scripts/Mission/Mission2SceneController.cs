@@ -31,7 +31,7 @@ namespace Mission
     /// <para>
     /// 보고서 화면: 들어갈 때 안내 TTS를 재생한다. 오답이면 TitleImage를 오답 문구로 바꾸고 오답 TTS가 끝나면 기본 문구로 되돌린다.
     /// 정답이면 ReportQuizView의 정답 연출(완성 보고서·도장, 도장 효과음)을 재생하고, 도장이 끝나고 _endDelaySeconds(1초) 뒤
-    /// 마무리 선택 화면(MissionEndView: 메시지 보내기 → 9_Message, 다른 미션 → 미션1·3)으로 넘어간다.
+    /// 마무리 선택 화면(MissionEndView: 메시지 보내기 → 9_Message, 다른 미션 → 미션1·3)으로 넘어간다. 마무리 선택 화면은 TTS(endTts)가 끝나면 버튼을 페이드인한다.
     /// </para>
     /// <para>
     /// TTS 파일이 아직 없어 경로가 빈 대사·오답 TTS는 _noTtsLineSeconds 동안 보여 준다.
@@ -82,6 +82,7 @@ namespace Mission
         private AudioClip[][] _lineClips = Array.Empty<AudioClip[]>();
         private AudioClip _quizIntroClip;
         private AudioClip _quizFailClip;
+        private AudioClip _endClip;
         private GameObject _visibleRoot;
         private bool _isInitialized;
         private bool _isLeaving;
@@ -242,14 +243,16 @@ namespace Mission
                 Mission2ContentTable table = await JsonLoader.LoadAsync<Mission2ContentTable>(Constants.Files.Mission2Content, cancellationToken, _logger);
 
                 // 파일을 하나씩 기다리면 첫 대사가 늦어지므로 모두 동시에 읽는다.
-                (_, AudioClip introClip, AudioClip failClip, AudioClip stampClip) = await UniTask.WhenAll(
+                (_, AudioClip introClip, AudioClip failClip, AudioClip stampClip, AudioClip endClip) = await UniTask.WhenAll(
                     LoadLineClipsAsync(table.screens ?? Array.Empty<DialogueScreenEntry>(), cancellationToken).AsAsyncUnitUniTask(),
                     _mediaPlayer.LoadClipAsync(table.quizIntroTts, cancellationToken),
                     _mediaPlayer.LoadClipAsync(table.quizFailTts, cancellationToken),
-                    _mediaPlayer.LoadClipAsync(table.stampSfx, cancellationToken));
+                    _mediaPlayer.LoadClipAsync(table.stampSfx, cancellationToken),
+                    _mediaPlayer.LoadClipAsync(table.endTts, cancellationToken));
 
                 _quizIntroClip = introClip;
                 _quizFailClip = failClip;
+                _endClip = endClip;
                 if (_quiz) _quiz.SetStampClip(stampClip);
             }
             catch (OperationCanceledException)
@@ -538,12 +541,17 @@ namespace Mission
         }
 
         /// <summary>
-        /// 마무리 선택 화면 버튼 페이드인. 페이드가 끝나 누를 수 있게 되면 무입력 타이머를 센다. 취소되면 그 상태에 둔다.
+        /// 마무리 선택 화면을 버튼 없이 켜고 TTS(endTts)가 끝나면 버튼을 페이드인함. 페이드가 끝나 누를 수 있게 되면 무입력 타이머를 센다.
+        /// 취소되면 그 상태에 둔다.
         /// </summary>
         private async UniTaskVoid RunEndAsync(CancellationTokenSource cts)
         {
             try
             {
+                _end.PrepareEndSelect();
+                _mediaPlayer.PlayClip(_endClip);
+                if (_endClip) await UniTask.WaitUntil(_isTtsFinished, PlayerLoopTiming.Update, cts.Token);
+
                 await _end.ShowEndSelectAsync(cts.Token);
                 if (_inactivityGate != null) _inactivityGate.OpenInput(_mediaPlayer);
             }
@@ -598,7 +606,7 @@ namespace Mission
         #region Quiz Feedback
 
         /// <summary>
-        /// 선택 완료를 누르면 오답은 오답 문구·TTS, 정답은 완성 보고서·도장 연출을 재생함. 새 제출은 이전 오답 흐름을 끊는다.
+        /// 사진 버튼을 누르면 오답은 오답 문구·TTS, 정답은 완성 보고서·도장 연출을 재생함. 새 제출은 이전 오답 흐름을 끊는다.
         /// </summary>
         private void OnQuizSubmitted(bool isCorrect)
         {
@@ -627,7 +635,7 @@ namespace Mission
         }
 
         /// <summary>
-        /// 오답 TTS가 끝나면(없으면 _noTtsLineSeconds 뒤) TitleImage를 기본 문구로 되돌리고 버튼 입력을 다시 받음.
+        /// 오답 TTS가 끝나면(없으면 _noTtsLineSeconds 뒤) TitleImage를 기본 문구로, ReportImage를 원래 보고서로 되돌리고 버튼 입력을 다시 받음.
         /// </summary>
         private async UniTaskVoid RunWrongAsync(CancellationTokenSource cts)
         {
@@ -635,6 +643,7 @@ namespace Mission
             {
                 await WaitTtsAsync(_quizFailClip, cts.Token);
                 _quiz.ShowDefaultTitle();
+                _quiz.RestoreReport();
                 _quiz.SetInputBlocked(false);
             }
             catch (OperationCanceledException)

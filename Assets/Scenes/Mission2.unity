@@ -1263,7 +1263,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &616436702
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1503,8 +1503,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _titleImage: {fileID: 99860193}
   _lineSprites:
-  - {fileID: 21300000, guid: 19e5a55f3ce0e85448fb6cc2ee9010b6, type: 3}
-  - {fileID: 21300000, guid: 5cd74be060cfaa145bb4fd673b90f950, type: 3}
+  - {fileID: 21300000, guid: d330e2b1a83064146b8cd6b0eb420ab9, type: 3}
+  - {fileID: 21300000, guid: b7998e158af5c844a95a474376642b3b, type: 3}
   _revealLineIndex: -1
   _textGroup: {fileID: 0}
   _textFadeSeconds: 1
@@ -2029,7 +2029,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1064641558
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2080,25 +2080,24 @@ MonoBehaviour:
   _choicesGroup: {fileID: 1381028778}
   _answers:
   - button: {fileID: 1740344395}
-    report: {fileID: 21300000, guid: 48a90f8ab75634a4da33d5f8f7c43459, type: 3}
-    result: {fileID: 21300000, guid: b9794d14b52d1ea40bc98f8966da9759, type: 3}
-    stemp: {fileID: 21300000, guid: 4f8ddfa858ee9a84c9a6dec7339eb41e, type: 3}
+    report: {fileID: 21300000, guid: 7585a541781e74c4bba3701b26977227, type: 3}
+    result: {fileID: 21300000, guid: 7075d587bed041745bd8336d0a06335e, type: 3}
+    stemp: {fileID: 21300000, guid: 99f787b4bd031c14da3f9f2462d1b279, type: 3}
   - button: {fileID: 1622282231}
     report: {fileID: 21300000, guid: 0f67edbde8b90a043b2ce219be37f754, type: 3}
-    result: {fileID: 21300000, guid: 4286c9a00744cc5458149c172ba1ab51, type: 3}
-    stemp: {fileID: 21300000, guid: 852bc39e3aeae2749b94ee42a8099dc2, type: 3}
+    result: {fileID: 21300000, guid: e47b7439af59d014eb9810a3e88f8502, type: 3}
+    stemp: {fileID: 21300000, guid: 894e0556355206f47975583fa3e1604f, type: 3}
   - button: {fileID: 2001440572}
     report: {fileID: 21300000, guid: 24f9d5cf190096b48af092486428d375, type: 3}
-    result: {fileID: 21300000, guid: 312cc0f8fc64e7f4483f6e6370602084, type: 3}
-    stemp: {fileID: 21300000, guid: f9d268de4afb1974d94ad9d14c2cf150, type: 3}
+    result: {fileID: 21300000, guid: 61e340888236fc444ac65fe9371b6331, type: 3}
+    stemp: {fileID: 21300000, guid: c8ce4f96b77d7b44cbaeb206888e7ae4, type: 3}
   - button: {fileID: 490953133}
     report: {fileID: 21300000, guid: 7fc1eeafd96207f4aa32b094e64815d6, type: 3}
-    result: {fileID: 21300000, guid: 72dbc2a97d32def4ca102f58afd97a7f, type: 3}
-    stemp: {fileID: 21300000, guid: fae439d316c9c014d9c2c141a0eeb5b7, type: 3}
+    result: {fileID: 21300000, guid: 3f2031718596ed942b350c3a83f4b4ec, type: 3}
+    stemp: {fileID: 21300000, guid: ede1c95bfcb07984485a1ff8e747c2f9, type: 3}
   _reportImage: {fileID: 1811454180}
   _reportGroup: {fileID: 1811454182}
   _slotImage: {fileID: 1154821250}
-  _submitButton: {fileID: 466965395}
   _resultTargetPosition: {x: 491, y: -118}
   _resultTargetSize: {x: 1000, y: 902}
   _moveDelaySeconds: 1
@@ -2205,7 +2204,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1154821249
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2841,8 +2840,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 186, y: -397}
-  m_SizeDelta: {x: 885, y: 654}
+  m_AnchoredPosition: {x: 261, y: -397}
+  m_SizeDelta: {x: 588, y: 654}
   m_Pivot: {x: 0, y: 1}
 --- !u!222 &1381028777
 CanvasRenderer:
@@ -3686,7 +3685,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1811454179
 RectTransform:
   m_ObjectHideFlags: 0
@@ -3730,7 +3729,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 48a90f8ab75634a4da33d5f8f7c43459, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 7585a541781e74c4bba3701b26977227, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
