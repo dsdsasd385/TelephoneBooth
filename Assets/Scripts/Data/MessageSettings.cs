@@ -9,7 +9,7 @@ namespace Data
     public class MessageSettings
     {
         // 다짐 최대 글자 수. 조합 중인 음절도 한 글자로 센다.
-        public int maxLength = 30;
+        public int maxLength = 15;
         // 이름 최대 글자 수.
         public int nameMaxLength = 10;
         // 보내기 후 MessageVideo에 재생할 로딩 영상(StreamingAssets 기준 상대 경로).

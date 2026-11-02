@@ -2,7 +2,7 @@
   "mcpServers": {
     "UnityMCP": {
       "type": "stdio",
-      "command": "C:\\Users\\HULIAC\\.local\\bin\\uvx.exe",
+      "command": "uvx",
       "args": [
         "--offline",
         "--from",
