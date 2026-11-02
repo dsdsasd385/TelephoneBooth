@@ -657,7 +657,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &280039582
 RectTransform:
   m_ObjectHideFlags: 0
@@ -709,16 +709,19 @@ MonoBehaviour:
   _choicesGroup: {fileID: 1032511406}
   _choices:
   - button: {fileID: 1978895054}
+    extraButton: {fileID: 723349140}
     isCorrect: 0
     feedbackTitle: {fileID: 21300000, guid: dcb07c08830c4b744b62c49185a70a8c, type: 3}
     selectedMark: {fileID: 598432779}
     wrongSprite: {fileID: 0}
   - button: {fileID: 263858833}
+    extraButton: {fileID: 1383142138}
     isCorrect: 0
     feedbackTitle: {fileID: 21300000, guid: 41ce5f65ecc995c45844a84f224e3670, type: 3}
     selectedMark: {fileID: 697267203}
     wrongSprite: {fileID: 0}
   - button: {fileID: 1277189880}
+    extraButton: {fileID: 290966388}
     isCorrect: 1
     feedbackTitle: {fileID: 21300000, guid: dbfe5db9e4455be4496e38e000d70f89, type: 3}
     selectedMark: {fileID: 446505155}
@@ -813,6 +816,7 @@ GameObject:
   - component: {fileID: 290966385}
   - component: {fileID: 290966387}
   - component: {fileID: 290966386}
+  - component: {fileID: 290966388}
   m_Layer: 0
   m_Name: Image3
   m_TagString: Untagged
@@ -878,6 +882,50 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 290966384}
   m_CullTransparentMesh: 1
+--- !u!114 &290966388
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 290966384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Navigation:
+    m_Mode: 0
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 290966386}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!1 &311523304
 GameObject:
   m_ObjectHideFlags: 0
@@ -2115,7 +2163,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &714355549
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2165,16 +2213,19 @@ MonoBehaviour:
   _choicesGroup: {fileID: 1434341006}
   _choices:
   - button: {fileID: 628569332}
+    extraButton: {fileID: 0}
     isCorrect: 0
     feedbackTitle: {fileID: 21300000, guid: 43a99b5aea20de147a93966bac11a5b4, type: 3}
     selectedMark: {fileID: 1135346328}
     wrongSprite: {fileID: 0}
   - button: {fileID: 1243350232}
+    extraButton: {fileID: 0}
     isCorrect: 0
     feedbackTitle: {fileID: 21300000, guid: d9fadbcb46d7c38498709df259f22151, type: 3}
     selectedMark: {fileID: 1254564625}
     wrongSprite: {fileID: 0}
   - button: {fileID: 1839293342}
+    extraButton: {fileID: 0}
     isCorrect: 1
     feedbackTitle: {fileID: 21300000, guid: 4ad0e672d8134df4b891d055bda9d73e, type: 3}
     selectedMark: {fileID: 1254653483}
@@ -2194,6 +2245,7 @@ GameObject:
   - component: {fileID: 723349137}
   - component: {fileID: 723349139}
   - component: {fileID: 723349138}
+  - component: {fileID: 723349140}
   m_Layer: 0
   m_Name: Image1
   m_TagString: Untagged
@@ -2259,6 +2311,50 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 723349136}
   m_CullTransparentMesh: 1
+--- !u!114 &723349140
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 723349136}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Navigation:
+    m_Mode: 0
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 723349138}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!1 &786805172
 GameObject:
   m_ObjectHideFlags: 0
@@ -4182,6 +4278,7 @@ GameObject:
   - component: {fileID: 1383142135}
   - component: {fileID: 1383142137}
   - component: {fileID: 1383142136}
+  - component: {fileID: 1383142138}
   m_Layer: 0
   m_Name: Image2
   m_TagString: Untagged
@@ -4247,6 +4344,50 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1383142134}
   m_CullTransparentMesh: 1
+--- !u!114 &1383142138
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1383142134}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Navigation:
+    m_Mode: 0
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 1383142136}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!1 &1391677132
 GameObject:
   m_ObjectHideFlags: 0
@@ -5383,7 +5524,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1720147678
 RectTransform:
   m_ObjectHideFlags: 0
@@ -5433,16 +5574,19 @@ MonoBehaviour:
   _choicesGroup: {fileID: 1181417519}
   _choices:
   - button: {fileID: 353275696}
+    extraButton: {fileID: 0}
     isCorrect: 0
     feedbackTitle: {fileID: 21300000, guid: 3b04c5959db559a40bb3626034cf6ebf, type: 3}
     selectedMark: {fileID: 1289963226}
     wrongSprite: {fileID: 0}
   - button: {fileID: 1983207685}
+    extraButton: {fileID: 0}
     isCorrect: 0
     feedbackTitle: {fileID: 21300000, guid: e93e93db53b5da048b961eb8eec66471, type: 3}
     selectedMark: {fileID: 1405776134}
     wrongSprite: {fileID: 0}
   - button: {fileID: 1811761863}
+    extraButton: {fileID: 0}
     isCorrect: 1
     feedbackTitle: {fileID: 21300000, guid: 78518b4e10714f248aeebf4e9e858567, type: 3}
     selectedMark: {fileID: 786805172}

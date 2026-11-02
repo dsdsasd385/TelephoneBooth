@@ -15,6 +15,8 @@ namespace Mission
     public struct QuizChoice
     {
         public Button button;
+        // 같은 선택지로 동작하는 추가 터치 영역(3단계 지도의 CheckPointImages). 비어 있으면 쓰지 않는다.
+        public Button extraButton;
         public bool isCorrect;
         // 이 선택지를 골랐을 때 TitleBox에 보여 줄 오답·정답 문구 Sprite.
         public Sprite feedbackTitle;
@@ -116,6 +118,16 @@ namespace Mission
                 button.OnClickAsObservable()
                     .Subscribe(_ => _choiceClicked.OnNext(index))
                     .AddTo(ref builder);
+
+                // 추가 터치 영역은 선택지 그룹 밖에 있을 수 있어, 그룹이 입력을 받을 때만 발행한다.
+                Button extraButton = _choices[i].extraButton;
+                if (extraButton)
+                {
+                    extraButton.OnClickAsObservable()
+                        .Where(_ => IsChoicesGroupAccepting())
+                        .Subscribe(_ => _choiceClicked.OnNext(index))
+                        .AddTo(ref builder);
+                }
             }
 
             if (_nextButton)
@@ -233,6 +245,14 @@ namespace Mission
         #endregion
 
         #region Private Methods
+
+        /// <summary>
+        /// 선택지 그룹이 지금 입력을 받는지 여부. 그룹이 없으면 항상 받는다.
+        /// </summary>
+        private bool IsChoicesGroupAccepting()
+        {
+            return !_choicesGroup || (_choicesGroup.interactable && _choicesGroup.blocksRaycasts);
+        }
 
         /// <summary>
         /// 선택 표시를 켜고 그래픽이 있으면 투명에서 페이드인함.
